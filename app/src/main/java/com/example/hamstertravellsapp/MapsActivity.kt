@@ -133,7 +133,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
             // add label
 
-            val labelPosition = SphericalUtil.computeOffset(home, hamster.value, 90.0);
+            val labelPosition = SphericalUtil.computeOffset(home, hamster.value, 90.0)
 
             mMap.addMarker(
                 MarkerOptions()
@@ -149,6 +149,14 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             .radius(radius) // In meters
 
          mMap.addCircle(circleOptions)
+
+        val labelPosition = SphericalUtil.computeOffset(home, radius, 90.0)
+
+        mMap.addMarker(
+            MarkerOptions()
+                .position(labelPosition)
+                .title("Paddy")
+        )
 
         mMap.setOnMapLoadedCallback {
             val cameraBounds = toBounds(home, radius)
