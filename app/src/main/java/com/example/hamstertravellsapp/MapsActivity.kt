@@ -1,9 +1,8 @@
-package com.example.hamstertravellsapp
+package com.example.hamstertravelsapp
 
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
-import android.view.View
-import android.view.ViewTreeObserver
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -11,7 +10,7 @@ import com.android.volley.Request
 import com.android.volley.RequestQueue
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
-import com.example.hamstertravellsapp.databinding.ActivityMapsBinding
+import com.example.hamstertravelsapp.databinding.ActivityMapsBinding
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
@@ -28,6 +27,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var binding: ActivityMapsBinding
     private val home = LatLng(51.54264825288355, -0.2931393365066958)
     var radius = 0.0
+
+    var previousHamsters = mapOf(
+        "Lily" to 412353.0,
+        "Tiffany" to 981041.0,
+        "Claude" to 5062603.0
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +101,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
         mMap.moveCamera(CameraUpdateFactory.newLatLng(home))
 
+        drawPrevious()
+
         if (radius > 0)
         {
             drawTotalDistance(home, radius)
@@ -112,12 +119,36 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         return LatLngBounds(southwestCorner, northeastCorner)
     }
 
+    fun drawPrevious()
+    {
+        previousHamsters.forEach { hamster ->
+            // draw circle
+
+            val circleOptions = CircleOptions()
+                .center(home)
+                .radius(hamster.value) // In meters
+                .strokeColor(Color.GRAY)
+
+            mMap.addCircle(circleOptions)
+
+            // add label
+
+            val labelPosition = SphericalUtil.computeOffset(home, hamster.value, 90.0);
+
+            mMap.addMarker(
+                MarkerOptions()
+                    .position(labelPosition)
+                    .title(hamster.key)
+            )
+        }
+    }
+
     fun drawTotalDistance(home: LatLng, radius: Double){
         val circleOptions = CircleOptions()
             .center(home)
             .radius(radius) // In meters
 
-        val circle = mMap.addCircle(circleOptions)
+         mMap.addCircle(circleOptions)
 
         mMap.setOnMapLoadedCallback {
             val cameraBounds = toBounds(home, radius)
