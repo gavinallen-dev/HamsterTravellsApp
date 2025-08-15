@@ -1,0 +1,7 @@
+-- get certificate SHA1
+
+"C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -list -v -keystore "C:\Users\gallen\keystore\HamsterTravels"
+
+-- install app
+
+"C:\Users\gallen\AppData\Local\Android\Sdk\platform-tools\adb.exe" install "C:\Users\gallen\StudioProjects\HamsterTravellsApp\app\release\app-release.apk"
