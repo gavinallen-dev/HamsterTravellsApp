@@ -31,7 +31,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     var previousHamsters = mapOf(
         "Lily" to 412353.0,
         "Tiffany" to 981041.0,
-        "Claude" to 5062603.0
+        "Claude" to 5062603.0,
+        "Paddy" to 2445456.0
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,7 +111,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         haveDrawnMap = true
     }
 
-    fun toBounds(center: LatLng?, radiusInMeters: Double): LatLngBounds {
+    fun toBounds(center: LatLng, radiusInMeters: Double): LatLngBounds {
         val distanceFromCenterToCorner = radiusInMeters * Math.sqrt(2.0)
         val southwestCorner: LatLng =
             SphericalUtil.computeOffset(center, distanceFromCenterToCorner, 225.0)
