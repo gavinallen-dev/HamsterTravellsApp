@@ -156,7 +156,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         mMap.addMarker(
             MarkerOptions()
                 .position(labelPosition)
-                .title("Paddy")
+                .title("Liam")
         )
 
         mMap.setOnMapLoadedCallback {
