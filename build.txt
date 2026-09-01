@@ -1,0 +1,31 @@
+# Hamster Travels App - Build & Deploy Commands
+
+## Gradle Build Commands
+- Build Debug APK:
+  ./gradlew assembleDebug
+
+- Build Release APK:
+  ./gradlew assembleRelease
+
+- Clean Project:
+  ./gradlew clean
+
+## ADB Deploy Commands
+- Install/Update Debug APK:
+  adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+- Install/Update Release APK (if signed):
+  adb install -r app/build/outputs/apk/release/app-release.apk
+
+- List Connected Devices:
+  adb devices
+
+- Uninstall App:
+  adb uninstall com.example.hamstertravelsapp
+
+## Logcat & Debugging
+- View App Logs:
+  adb logcat --pid=$(adb shell pidof -s com.example.hamstertravelsapp)
+
+- Take Screenshot:
+  adb shell screencap -p /sdcard/screen.png && adb pull /sdcard/screen.png
