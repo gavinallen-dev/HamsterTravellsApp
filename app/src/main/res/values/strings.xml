@@ -1,4 +1,13 @@
 <resources>
     <string name="app_name">Hamster Travels</string>
     <string name="title_activity_maps">Hamster Travels</string>
+    <string name="menu_map">Map</string>
+    <string name="menu_leaderboard">Leaderboard</string>
+    <string name="menu_stats">Stats</string>
+    <string name="leaderboard_current_position">Current Position</string>
+    <string name="leaderboard_ahead">%.1f km ahead</string>
+    <string name="leaderboard_behind">%.1f km behind</string>
+    <string name="leaderboard_distance_home">%.1f km from home</string>
+    <string name="title_leaderboard">Leaderboard</string>
+    <string name="title_stats">Activity Stats</string>
 </resources>

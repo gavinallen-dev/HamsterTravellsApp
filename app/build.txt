@@ -4,4 +4,4 @@
 
 -- install app
 
-"C:\Users\gallen\AppData\Local\Android\Sdk\platform-tools\adb.exe" install "C:\Users\gallen\StudioProjects\HamsterTravellsApp\app\release\app-release.apk"
+C:\Users\gallen\AppData\Local\Android\Sdk\platform-tools\adb.exe install "C:\Users\gallen\StudioProjects\HamsterTravellsApp\app\release\app-release.apk"

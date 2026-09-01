@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="leaderboard_highlight">#332196F3</color> <!-- Primary with 20% alpha -->
+    <color name="gap_text_color">#BB86FC</color> <!-- purple_200 -->
+    <color name="card_background_default">#1E1E1E</color>
+</resources>
