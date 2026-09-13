@@ -10,4 +10,12 @@
     <string name="leaderboard_distance_home">%.1f km from home</string>
     <string name="title_leaderboard">Leaderboard</string>
     <string name="title_stats">Activity Stats</string>
+    <string name="label_total">Total</string>
+    <string name="label_daily">Daily</string>
+    <string name="chart_label_total">Total Distance (m)</string>
+    <string name="chart_label_daily">Daily Distance (m)</string>
+    <string name="tab_day">Day</string>
+    <string name="tab_week">Week</string>
+    <string name="tab_month">Month</string>
+    <string name="tab_year">Year</string>
 </resources>

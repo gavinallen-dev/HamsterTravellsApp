@@ -19,6 +19,7 @@ class LeaderboardFragment : Fragment() {
     
     private val viewModel: HamsterViewModel by activityViewModels()
     private lateinit var adapter: LeaderboardAdapter
+    private var hasScrolledToCurrent = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -51,7 +52,21 @@ class LeaderboardFragment : Fragment() {
         binding.leaderboardRecycler.adapter = adapter
         
         viewModel.leaderboard.observe(viewLifecycleOwner) { list ->
-            adapter.submitList(list)
+            adapter.submitList(list) {
+                if (!hasScrolledToCurrent && list.isNotEmpty()) {
+                    val currentPosition = list.indexOfFirst { it.isCurrent }
+                    if (currentPosition != -1) {
+                        binding.leaderboardRecycler.post {
+                            val layoutManager = binding.leaderboardRecycler.layoutManager as LinearLayoutManager
+                            val centerOffset = binding.leaderboardRecycler.height / 2
+                            // Estimate item height: 72dp content + 8dp margin = 80dp
+                            val itemHeightApprox = (80 * resources.displayMetrics.density).toInt()
+                            layoutManager.scrollToPositionWithOffset(currentPosition, centerOffset - (itemHeightApprox / 2))
+                            hasScrolledToCurrent = true
+                        }
+                    }
+                }
+            }
         }
         
         viewModel.updateLeaderboard()

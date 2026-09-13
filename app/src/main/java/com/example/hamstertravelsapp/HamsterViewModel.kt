@@ -249,7 +249,7 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
                     isHamster = true,
                     flag = "🐹",
                     isCurrent = true,
-                )
+                ),
             )
         }
 
@@ -257,7 +257,7 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
         _leaderboard.value = list
     }
 
-    data class HistoryPoint(val timestamp: Long, val distance: Double)
+    data class HistoryPoint(val timestamp: Long, val totalDistance: Double?, val dailyDistance: Double?)
     private val _history = MutableLiveData<List<HistoryPoint>>()
     val history: LiveData<List<HistoryPoint>> = _history
 
@@ -286,24 +286,33 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
                 for (i in 0 until feeds.length()) {
                     val feed = feeds.getJSONObject(i)
                     val field8 = feed.optString("field8")
-                    if ((field8 != "null") && field8.isNotEmpty()) {
-                        val distance = field8.toDouble()
+                    val field5 = feed.optString("field5")
+                    
+                    if (i == 0) {
+                        Log.d("HamsterViewModel", "First feed: $feed")
+                    }
+
+                    val totalDistance = if ((field8 != "null") && field8.isNotEmpty()) field8.toDouble() else null
+                    val dailyDistance = if ((field5 != "null") && field5.isNotEmpty()) field5.toDouble() else null
+
+                    if ((totalDistance != null) || (dailyDistance != null)) {
                         val timeStr = feed.getString("created_at")
                         val time = sdf.parse(timeStr)?.time ?: 0L
-                        list.add(HistoryPoint(time, distance))
+                        list.add(HistoryPoint(time, totalDistance, dailyDistance))
                     }
                 }
                 _history.postValue(list)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+        },
+        { error ->
+            Log.e("HamsterViewModel", "Error fetching history: $error")
         }
-    ) { error ->
-        Log.e("HamsterViewModel", "Error fetching history: $error")
-    }
+    )
 
-        queue.add(request)
-    }
+    queue.add(request)
+}
 
     fun fetchCurrentDistance() {
         val queue = Volley.newRequestQueue(getApplication())

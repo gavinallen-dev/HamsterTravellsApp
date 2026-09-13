@@ -1,10 +1,14 @@
 package com.example.hamstertravelsapp
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
@@ -14,6 +18,8 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.Circle
 import com.google.android.gms.maps.model.CircleOptions
 import com.google.android.gms.maps.model.LatLng
@@ -34,6 +40,7 @@ class MapFragment : Fragment(), OnMapReadyCallback {
     
     private var hamsterMarker: Marker? = null
     private var hamsterCircle: Circle? = null
+    private var cachedHamsterIcon: BitmapDescriptor? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -69,11 +76,6 @@ class MapFragment : Fragment(), OnMapReadyCallback {
             insets
         }
 
-        val markerOptions = MarkerOptions()
-            .position(viewModel.home)
-            .title("Home")
-
-        mMap.addMarker(markerOptions)
         mMap.moveCamera(CameraUpdateFactory.newLatLng(viewModel.home))
 
         drawPrevious()
@@ -87,6 +89,7 @@ class MapFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun drawPrevious() {
+        val icon = getHamsterIcon()
         viewModel.previousHamsters.forEach { hamster ->
             val circleOptions = CircleOptions()
                 .center(viewModel.home)
@@ -99,7 +102,8 @@ class MapFragment : Fragment(), OnMapReadyCallback {
             mMap.addMarker(
                 MarkerOptions()
                     .position(labelPosition)
-                    .title(hamster.key),
+                    .title(hamster.key)
+                    .icon(icon),
             )
         }
     }
@@ -118,11 +122,25 @@ class MapFragment : Fragment(), OnMapReadyCallback {
         hamsterMarker = mMap.addMarker(
             MarkerOptions()
                 .position(labelPosition)
-                .title(viewModel.currentHamsterName),
+                .title(viewModel.currentHamsterName)
+                .icon(getHamsterIcon()),
         )
 
         val cameraBounds = toBounds(home, radius)
         mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(cameraBounds, 100))
+    }
+
+    private fun getHamsterIcon(): BitmapDescriptor {
+        cachedHamsterIcon?.let { return it }
+        val size = (24 * resources.displayMetrics.density).toInt()
+        val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val drawable = ContextCompat.getDrawable(requireContext(), R.mipmap.ic_hamster)
+        drawable?.setBounds(0, 0, size, size)
+        drawable?.draw(canvas)
+        val icon = BitmapDescriptorFactory.fromBitmap(bitmap)
+        cachedHamsterIcon = icon
+        return icon
     }
 
     private fun toBounds(center: LatLng, radiusInMeters: Double): LatLngBounds {

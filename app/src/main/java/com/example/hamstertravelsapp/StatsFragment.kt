@@ -12,12 +12,16 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import com.example.hamstertravelsapp.databinding.FragmentStatsBinding
 import com.github.mikephil.charting.components.XAxis
+import com.github.mikephil.charting.data.BarData
+import com.github.mikephil.charting.data.BarDataSet
+import com.github.mikephil.charting.data.BarEntry
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
 import com.google.android.material.tabs.TabLayout
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -54,7 +58,8 @@ class StatsFragment : Fragment() {
             insets
         }
 
-        setupChart()
+        setupLineChart()
+        setupBarChart()
         
         binding.tabLayout.addOnTabSelectedListener(
             object : TabLayout.OnTabSelectedListener {
@@ -75,6 +80,12 @@ class StatsFragment : Fragment() {
             },
         )
 
+        binding.distanceTypeToggle.addOnButtonCheckedListener { _, _, isChecked ->
+            if (isChecked) {
+                viewModel.history.value?.let { updateChart(it) }
+            }
+        }
+
         viewModel.history.observe(viewLifecycleOwner) { history ->
             binding.loadingProgress.visibility = View.GONE
             updateChart(history)
@@ -85,7 +96,9 @@ class StatsFragment : Fragment() {
         binding.loadingProgress.visibility = View.VISIBLE
     }
 
-    private fun setupChart() {
+    private var chartReferenceTime: Long = 0L
+
+    private fun setupLineChart() {
         val textColor = ContextCompat.getColor(requireContext(), R.color.chart_text)
         val gridColor = ContextCompat.getColor(requireContext(), R.color.chart_grid)
         binding.lineChart.apply {
@@ -101,31 +114,141 @@ class StatsFragment : Fragment() {
             legend.textColor = textColor
             
             xAxis.valueFormatter = object : ValueFormatter() {
-                private val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
                 override fun getFormattedValue(value: Float): String {
-                    return sdf.format(Date(value.toLong()))
+                    val date = Date(value.toLong() + chartReferenceTime)
+                    val pattern = when (binding.tabLayout.selectedTabPosition) {
+                        0 -> "HH:mm"
+                        1 -> "EEE"
+                        2 -> "MMM d"
+                        3 -> "MMM ''yy"
+                        else -> "MMM d"
+                    }
+                    return SimpleDateFormat(pattern, Locale.getDefault()).format(date)
                 }
             }
+            xAxis.granularity = 1f
+        }
+    }
+
+    private fun setupBarChart() {
+        val textColor = ContextCompat.getColor(requireContext(), R.color.chart_text)
+        val gridColor = ContextCompat.getColor(requireContext(), R.color.chart_grid)
+        binding.barChart.apply {
+            description.isEnabled = false
+            setTouchEnabled(true)
+            setPinchZoom(true)
+            xAxis.position = XAxis.XAxisPosition.BOTTOM
+            xAxis.textColor = textColor
+            xAxis.gridColor = gridColor
+            axisLeft.textColor = textColor
+            axisLeft.gridColor = gridColor
+            axisRight.isEnabled = false
+            legend.textColor = textColor
+
+            xAxis.valueFormatter = object : ValueFormatter() {
+                override fun getFormattedValue(value: Float): String {
+                    val date = Date(value.toLong() + chartReferenceTime)
+                    val pattern = when (binding.tabLayout.selectedTabPosition) {
+                        0 -> "HH:mm"
+                        1 -> "EEE"
+                        2 -> "MMM d"
+                        3 -> "MMM ''yy"
+                        else -> "MMM d"
+                    }
+                    return SimpleDateFormat(pattern, Locale.getDefault()).format(date)
+                }
+            }
+            xAxis.granularity = 1f
         }
     }
 
     private fun updateChart(history: List<HamsterViewModel.HistoryPoint>) {
-        val entries = history.map { Entry(it.timestamp.toFloat(), it.distance.toFloat()) }
+        if (history.isEmpty()) {
+            binding.lineChart.clear()
+            binding.barChart.clear()
+            return
+        }
+
+        val isTotal = binding.distanceTypeToggle.checkedButtonId == R.id.button_total
+        
+        if (isTotal) {
+            binding.lineChart.visibility = View.VISIBLE
+            binding.barChart.visibility = View.GONE
+            updateLineChart(history)
+        } else {
+            binding.lineChart.visibility = View.GONE
+            binding.barChart.visibility = View.VISIBLE
+            updateBarChart(history)
+        }
+    }
+
+    private fun updateLineChart(history: List<HamsterViewModel.HistoryPoint>) {
+        chartReferenceTime = history.first().timestamp
+        
+        val entries = history.mapNotNull {
+            it.totalDistance?.let { y -> Entry((it.timestamp - chartReferenceTime).toFloat(), y.toFloat()) }
+        }
+        
         val lineColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
         val fillColor = ContextCompat.getColor(requireContext(), R.color.chart_fill)
         
-        val dataSet = LineDataSet(entries, "Distance (m)").apply {
+        val dataSet = LineDataSet(entries, getString(R.string.chart_label_total)).apply {
             color = lineColor
-            lineWidth = 2.5f
+            lineWidth = 1.5f
             setDrawCircles(false)
             valueTextSize = 0f
             setDrawFilled(true)
             this.fillColor = fillColor
-            fillAlpha = 51 // 20% transparency (0.2 * 255)
+            fillAlpha = 51
         }
 
         binding.lineChart.data = LineData(dataSet)
+        binding.lineChart.xAxis.setLabelCount(5, false)
         binding.lineChart.invalidate()
+    }
+
+    private fun updateBarChart(history: List<HamsterViewModel.HistoryPoint>) {
+        val dailyMaxes = history.asSequence()
+            .filter { it.dailyDistance != null }
+            .groupBy { 
+                val cal = Calendar.getInstance().apply { 
+                    timeInMillis = it.timestamp
+                    this[Calendar.HOUR_OF_DAY] = 0
+                    this[Calendar.MINUTE] = 0
+                    this[Calendar.SECOND] = 0
+                    this[Calendar.MILLISECOND] = 0
+                }
+                cal.timeInMillis
+            }
+            .mapValues { entry -> entry.value.maxOf { it.dailyDistance!! } }
+            .toSortedMap()
+
+        if (dailyMaxes.isEmpty()) {
+            binding.barChart.clear()
+            return
+        }
+
+        chartReferenceTime = dailyMaxes.firstKey()
+
+        val entries = dailyMaxes.map { (timestamp, maxDistance) ->
+            BarEntry((timestamp - chartReferenceTime).toFloat(), maxDistance.toFloat())
+        }
+
+        val barColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
+        
+        val dataSet = BarDataSet(entries, getString(R.string.chart_label_daily)).apply {
+            color = barColor
+            valueTextSize = 0f
+        }
+
+        val barData = BarData(dataSet)
+        // Set bar width to 80% of a day in milliseconds
+        barData.barWidth = 86400000f * 0.8f 
+
+        binding.barChart.data = barData
+        binding.barChart.xAxis.granularity = 86400000f
+        binding.barChart.xAxis.setLabelCount(minOf(dailyMaxes.size, 5), false)
+        binding.barChart.invalidate()
     }
 
     override fun onDestroyView() {
