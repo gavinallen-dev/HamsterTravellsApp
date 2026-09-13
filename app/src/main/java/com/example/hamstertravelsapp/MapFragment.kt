@@ -1,6 +1,5 @@
 package com.example.hamstertravelsapp
 
-import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -19,7 +18,6 @@ import com.google.android.gms.maps.model.Circle
 import com.google.android.gms.maps.model.CircleOptions
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
-import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.maps.android.SphericalUtil
@@ -58,16 +56,16 @@ class MapFragment : Fragment(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
-        val nightModeFlags = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        if (nightModeFlags == Configuration.UI_MODE_NIGHT_YES) {
-            mMap.setMapStyle(
-                MapStyleOptions.loadRawResourceStyle(requireContext(), R.raw.map_style_dark),
-            )
-        }
+        mMap.uiSettings.isRotateGesturesEnabled = false
+        mMap.uiSettings.isCompassEnabled = false
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            mMap.setPadding(systemBars.left, systemBars.top, systemBars.right, 0)
+            // Shift map UI elements (like the compass and Google logo) so they aren't 
+            // obscured by the status bar or notch. We add a small extra margin (16dp) 
+            // for better visual breathing room.
+            val extraPadding = (16 * resources.displayMetrics.density).toInt()
+            mMap.setPadding(systemBars.left, systemBars.top + extraPadding, systemBars.right, 0)
             insets
         }
 

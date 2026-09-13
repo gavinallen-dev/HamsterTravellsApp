@@ -1,10 +1,10 @@
 package com.example.hamstertravelsapp
 
-import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -86,15 +86,19 @@ class StatsFragment : Fragment() {
     }
 
     private fun setupChart() {
+        val textColor = ContextCompat.getColor(requireContext(), R.color.chart_text)
+        val gridColor = ContextCompat.getColor(requireContext(), R.color.chart_grid)
         binding.lineChart.apply {
             description.isEnabled = false
             setTouchEnabled(true)
             setPinchZoom(true)
             xAxis.position = XAxis.XAxisPosition.BOTTOM
-            xAxis.textColor = Color.GRAY
-            axisLeft.textColor = Color.GRAY
+            xAxis.textColor = textColor
+            xAxis.gridColor = gridColor
+            axisLeft.textColor = textColor
+            axisLeft.gridColor = gridColor
             axisRight.isEnabled = false
-            legend.textColor = Color.GRAY
+            legend.textColor = textColor
             
             xAxis.valueFormatter = object : ValueFormatter() {
                 private val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -107,15 +111,17 @@ class StatsFragment : Fragment() {
 
     private fun updateChart(history: List<HamsterViewModel.HistoryPoint>) {
         val entries = history.map { Entry(it.timestamp.toFloat(), it.distance.toFloat()) }
+        val lineColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
+        val fillColor = ContextCompat.getColor(requireContext(), R.color.chart_fill)
         
         val dataSet = LineDataSet(entries, "Distance (m)").apply {
-            color = Color.BLUE
-            lineWidth = 2f
+            color = lineColor
+            lineWidth = 2.5f
             setDrawCircles(false)
             valueTextSize = 0f
             setDrawFilled(true)
-            fillColor = Color.BLUE
-            fillAlpha = 30
+            this.fillColor = fillColor
+            fillAlpha = 51 // 20% transparency (0.2 * 255)
         }
 
         binding.lineChart.data = LineData(dataSet)
