@@ -9,6 +9,7 @@ import com.android.volley.Request
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
 import com.google.android.gms.maps.model.LatLng
+import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -58,7 +59,11 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
 
     fun fetchHistory(days: Int) {
         val queue = Volley.newRequestQueue(getApplication())
-        val url = "https://api.thingspeak.com/channels/1061276/feeds.json?days=$days"
+        val url = if (days >= 30) {
+            "https://api.thingspeak.com/channels/1061276/feeds.json?results=8000"
+        } else {
+            "https://api.thingspeak.com/channels/1061276/feeds.json?days=$days"
+        }
 
         val request = JsonObjectRequest(
             Request.Method.GET,
@@ -67,29 +72,40 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
             { response ->
                 try {
                     val feeds = response.getJSONArray("feeds")
-                    val list = mutableListOf<HistoryPoint>()
-                    val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-                    sdf.timeZone = TimeZone.getTimeZone("UTC")
+                    if (days >= 30 && feeds.length() > 0) {
+                        val oldestFeed = feeds.getJSONObject(0)
+                        val oldestCreated = oldestFeed.getString("created_at")
+                        val url2 = "https://api.thingspeak.com/channels/1061276/feeds.json?results=8000&end=$oldestCreated"
 
-                    for (i in 0 until feeds.length()) {
-                        val feed = feeds.getJSONObject(i)
-                        val field8 = feed.optString("field8")
-                        val field5 = feed.optString("field5")
-
-                        if (i == 0) {
-                            Log.d("HamsterViewModel", "First feed: $feed")
-                        }
-
-                        val totalDistance = if ((field8 != "null") && field8.isNotEmpty()) field8.toDouble() else null
-                        val dailyDistance = if ((field5 != "null") && field5.isNotEmpty()) field5.toDouble() else null
-
-                        if ((totalDistance != null) || (dailyDistance != null)) {
-                            val timeStr = feed.getString("created_at")
-                            val time = sdf.parse(timeStr)?.time ?: 0L
-                            list.add(HistoryPoint(time, totalDistance, dailyDistance))
-                        }
+                        val request2 = JsonObjectRequest(
+                            Request.Method.GET,
+                            url2,
+                            null,
+                            { response2 ->
+                                try {
+                                    val feeds2 = response2.getJSONArray("feeds")
+                                    val combinedFeeds = JSONArray()
+                                    for (i in 0 until feeds2.length()) {
+                                        combinedFeeds.put(feeds2.getJSONObject(i))
+                                    }
+                                    for (i in 0 until feeds.length()) {
+                                        combinedFeeds.put(feeds.getJSONObject(i))
+                                    }
+                                    processFeeds(combinedFeeds, days)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    processFeeds(feeds, days)
+                                }
+                            },
+                            { error ->
+                                Log.e("HamsterViewModel", "Error fetching history batch 2: $error")
+                                processFeeds(feeds, days)
+                            }
+                        )
+                        queue.add(request2)
+                    } else {
+                        processFeeds(feeds, days)
                     }
-                    _history.postValue(list)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -99,6 +115,36 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
         }
 
         queue.add(request)
+    }
+
+    private fun processFeeds(feeds: JSONArray, days: Int) {
+        val list = mutableListOf<HistoryPoint>()
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        sdf.timeZone = TimeZone.getTimeZone("UTC")
+
+        val cutoffTime = if (days > 0 && days < 365) {
+            System.currentTimeMillis() - (days.toLong() * 24 * 60 * 60 * 1000L)
+        } else {
+            0L
+        }
+
+        for (i in 0 until feeds.length()) {
+            val feed = feeds.getJSONObject(i)
+            val field8 = feed.optString("field8")
+            val field5 = feed.optString("field5")
+
+            val totalDistance = if ((field8 != "null") && field8.isNotEmpty()) field8.toDouble() else null
+            val dailyDistance = if ((field5 != "null") && field5.isNotEmpty()) field5.toDouble() else null
+
+            if ((totalDistance != null) || (dailyDistance != null)) {
+                val timeStr = feed.getString("created_at")
+                val time = sdf.parse(timeStr)?.time ?: 0L
+                if (days == 365 || time >= cutoffTime) {
+                    list.add(HistoryPoint(time, totalDistance, dailyDistance))
+                }
+            }
+        }
+        _history.postValue(list)
     }
 
     fun fetchCurrentDistance() {
