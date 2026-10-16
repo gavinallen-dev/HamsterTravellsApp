@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -20,8 +19,8 @@ import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxHeight
+import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.state.PreferencesGlanceStateDefinition
@@ -30,9 +29,6 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import java.util.Locale
-
-import androidx.glance.unit.FixedColorProvider
-import androidx.glance.unit.ResourceColorProvider
 
 class HamsterWidget : GlanceAppWidget() {
 
@@ -48,14 +44,17 @@ class HamsterWidget : GlanceAppWidget() {
 
             val displayPercentage = if (percentage >= 100.0) percentage - 100.0 else 100.0 - percentage
             val trendSymbol = if (percentage >= 100.0) "▲" else "▼"
-            val trendColorProvider = ResourceColorProvider(
-                if (percentage >= 100.0) R.color.widget_trend_up else R.color.widget_trend_down
-            )
+            val trendColor = if (percentage >= 100.0) {
+                Color(context.getColor(R.color.widget_trend_up))
+            } else {
+                Color(context.getColor(R.color.widget_trend_down))
+            }
+            val trendColorProvider = ColorProvider(trendColor)
 
             Row(
                 modifier = GlanceModifier
                     .fillMaxSize()
-                    .background(FixedColorProvider(Color(0xFF1E1E24)))
+                    .background(ColorProvider(Color(0xFF1E1E24)))
                     .padding(horizontal = 12.dp, vertical = 6.dp)
                     .clickable(actionRunCallback<HamsterWidgetClickAction>()),
                 verticalAlignment = Alignment.CenterVertically,
@@ -74,7 +73,7 @@ class HamsterWidget : GlanceAppWidget() {
                     Text(
                         text = "LAST NIGHT",
                         style = TextStyle(
-                            color = FixedColorProvider(Color(0xFFB0BEC5)),
+                            color = ColorProvider(Color(0xFFB0BEC5)),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Normal,
                         ),
@@ -82,7 +81,7 @@ class HamsterWidget : GlanceAppWidget() {
                     Text(
                         text = String.format(Locale.US, "%.0f m", lastNightPeak),
                         style = TextStyle(
-                            color = FixedColorProvider(Color.White),
+                            color = ColorProvider(Color.White),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -98,7 +97,7 @@ class HamsterWidget : GlanceAppWidget() {
                     Text(
                         text = "TOTAL RUN",
                         style = TextStyle(
-                            color = FixedColorProvider(Color(0xFFB0BEC5)),
+                            color = ColorProvider(Color(0xFFB0BEC5)),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Normal,
                         ),
@@ -106,7 +105,7 @@ class HamsterWidget : GlanceAppWidget() {
                     Text(
                         text = String.format(Locale.US, "%.0f m", totalDistance),
                         style = TextStyle(
-                            color = FixedColorProvider(Color.White),
+                            color = ColorProvider(Color.White),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -122,7 +121,7 @@ class HamsterWidget : GlanceAppWidget() {
                     Text(
                         text = "VS 7-DAY AVG",
                         style = TextStyle(
-                            color = FixedColorProvider(Color(0xFFB0BEC5)),
+                            color = ColorProvider(Color(0xFFB0BEC5)),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Normal,
                         ),
@@ -142,7 +141,7 @@ class HamsterWidget : GlanceAppWidget() {
                 Text(
                     text = lastUpdate,
                     style = TextStyle(
-                        color = FixedColorProvider(Color(0xFF9E9E9E)),
+                        color = ColorProvider(Color(0xFF9E9E9E)),
                         fontSize = 9.sp,
                     ),
                 )

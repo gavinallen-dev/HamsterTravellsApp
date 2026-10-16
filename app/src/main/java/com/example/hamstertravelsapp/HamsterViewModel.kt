@@ -336,7 +336,7 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         sdf.timeZone = TimeZone.getTimeZone("UTC")
 
-        val cutoffTime = if (days > 0 && days < 365) {
+        val cutoffTime = if (days in 1..364) {
             System.currentTimeMillis() - (days.toLong() * 24 * 60 * 60 * 1000L)
         } else {
             0L
