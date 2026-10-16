@@ -68,7 +68,6 @@ class StatsFragment : Fragment() {
                         0 -> 1
                         1 -> 7
                         2 -> 30
-                        3 -> 365
                         else -> 1
                     }
                     viewModel.fetchHistory(days)
@@ -120,7 +119,6 @@ class StatsFragment : Fragment() {
                         0 -> "HH:mm"
                         1 -> "EEE"
                         2 -> "MMM d"
-                        3 -> "MMM ''yy"
                         else -> "MMM d"
                     }
                     return SimpleDateFormat(pattern, Locale.getDefault()).format(date)
@@ -152,7 +150,6 @@ class StatsFragment : Fragment() {
                         0 -> "HH:mm"
                         1 -> "EEE"
                         2 -> "MMM d"
-                        3 -> "MMM ''yy"
                         else -> "MMM d"
                     }
                     return SimpleDateFormat(pattern, Locale.getDefault()).format(date)

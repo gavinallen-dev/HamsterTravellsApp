@@ -34,6 +34,7 @@ class LeaderboardFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         val initialPaddingTop = binding.root.paddingTop
+        val initialPaddingBottom = binding.root.paddingBottom
         val initialPaddingLeft = binding.root.paddingLeft
         val initialPaddingRight = binding.root.paddingRight
         
@@ -41,6 +42,7 @@ class LeaderboardFragment : Fragment() {
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.updatePadding(
                 top = initialPaddingTop + systemBars.top,
+                bottom = initialPaddingBottom + systemBars.bottom,
                 left = initialPaddingLeft + systemBars.left,
                 right = initialPaddingRight + systemBars.right,
             )
