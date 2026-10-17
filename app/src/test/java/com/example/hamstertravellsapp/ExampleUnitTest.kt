@@ -1,4 +1,4 @@
-package com.example.hamstertravelsapp
+package com.example.hamstertravellsapp
 
 import org.junit.Test
 

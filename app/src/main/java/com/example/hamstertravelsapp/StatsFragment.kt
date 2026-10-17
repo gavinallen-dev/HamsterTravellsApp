@@ -182,8 +182,8 @@ class StatsFragment : Fragment() {
     private fun updateLineChart(history: List<HamsterViewModel.HistoryPoint>) {
         chartReferenceTime = history.first().timestamp
         
-        val entries = history.mapNotNull {
-            it.totalDistance?.let { y -> Entry((it.timestamp - chartReferenceTime).toFloat(), y.toFloat()) }
+        val entries = history.mapNotNull { (timestamp, totalDistance) ->
+            totalDistance?.let { y -> Entry((timestamp - chartReferenceTime).toFloat(), y.toFloat()) }
         }
         
         val lineColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
@@ -206,10 +206,10 @@ class StatsFragment : Fragment() {
 
     private fun updateBarChart(history: List<HamsterViewModel.HistoryPoint>) {
         val dailyMaxes = history.asSequence()
-            .filter { it.dailyDistance != null }
-            .groupBy { 
+            .filter { (_, _, dailyDistance) -> dailyDistance != null }
+            .groupBy { (timestamp) -> 
                 val cal = Calendar.getInstance().apply { 
-                    timeInMillis = it.timestamp
+                    timeInMillis = timestamp
                     this[Calendar.HOUR_OF_DAY] = 0
                     this[Calendar.MINUTE] = 0
                     this[Calendar.SECOND] = 0
@@ -217,7 +217,7 @@ class StatsFragment : Fragment() {
                 }
                 cal.timeInMillis
             }
-            .mapValues { entry -> entry.value.maxOf { it.dailyDistance!! } }
+            .mapValues { (_, points) -> points.maxOf { (_, _, dailyDistance) -> dailyDistance!! } }
             .toSortedMap()
 
         if (dailyMaxes.isEmpty()) {

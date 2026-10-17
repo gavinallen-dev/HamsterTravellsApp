@@ -23,18 +23,18 @@ class LeaderboardAdapter :
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = getItem(position)
+        val (name, distance, flag, isCurrent) = getItem(position)
         val context = holder.itemView.context
-        holder.binding.name.text = item.name
-        holder.binding.flag.text = item.flag
+        holder.binding.name.text = name
+        holder.binding.flag.text = flag
         
-        val distanceKm = item.distance / 1000.0
+        val distanceKm = distance / 1000.0
         holder.binding.distance.text = context.getString(R.string.leaderboard_distance_home, distanceKm)
 
-        val currentHamster = currentList.find { it.isCurrent }
+        val currentHamster = currentList.find { (_, _, _, isCurr) -> isCurr }
         if (currentHamster != null) {
-            val gap = (item.distance - currentHamster.distance) / 1000.0
-            if (item.isCurrent) {
+            val gap = (distance - currentHamster.distance) / 1000.0
+            if (isCurrent) {
                 holder.binding.gap.text = context.getString(R.string.leaderboard_current_position)
                 holder.binding.root.setCardBackgroundColor(ContextCompat.getColor(context, R.color.leaderboard_highlight))
             } else {

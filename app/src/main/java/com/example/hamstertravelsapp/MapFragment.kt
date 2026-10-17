@@ -90,19 +90,19 @@ class MapFragment : Fragment(), OnMapReadyCallback {
 
     private fun drawPrevious() {
         val icon = getHamsterIcon()
-        viewModel.previousHamsters.forEach { hamster ->
+        viewModel.previousHamsters.forEach { (name, value) ->
             val circleOptions = CircleOptions()
                 .center(viewModel.home)
-                .radius(hamster.value)
+                .radius(value)
                 .strokeColor(Color.GRAY)
 
             mMap.addCircle(circleOptions)
 
-            val labelPosition = SphericalUtil.computeOffset(viewModel.home, hamster.value, 90.0)
+            val labelPosition = SphericalUtil.computeOffset(viewModel.home, value, 90.0)
             mMap.addMarker(
                 MarkerOptions()
                     .position(labelPosition)
-                    .title(hamster.key)
+                    .title(name)
                     .icon(icon),
             )
         }

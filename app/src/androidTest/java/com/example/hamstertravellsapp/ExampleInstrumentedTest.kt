@@ -1,4 +1,4 @@
-package com.example.hamstertravelsapp
+package com.example.hamstertravellsapp
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4

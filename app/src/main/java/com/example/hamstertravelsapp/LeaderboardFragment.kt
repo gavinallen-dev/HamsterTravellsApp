@@ -56,7 +56,7 @@ class LeaderboardFragment : Fragment() {
         viewModel.leaderboard.observe(viewLifecycleOwner) { list ->
             adapter.submitList(list) {
                 if (!hasScrolledToCurrent && list.isNotEmpty()) {
-                    val currentPosition = list.indexOfFirst { it.isCurrent }
+                    val currentPosition = list.indexOfFirst { (_, _, _, isCurrent) -> isCurrent }
                     if (currentPosition != -1) {
                         binding.leaderboardRecycler.post {
                             val layoutManager = binding.leaderboardRecycler.layoutManager as LinearLayoutManager

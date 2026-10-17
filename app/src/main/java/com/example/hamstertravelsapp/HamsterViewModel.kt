@@ -248,7 +248,7 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
             )
         )
 
-        _leaderboard.value = list.sortedBy { it.distance }
+        _leaderboard.value = list.sortedBy { (_, distance) -> distance }
     }
 
     data class HistoryPoint(val timestamp: Long, val totalDistance: Double?, val dailyDistance: Double?)
@@ -336,7 +336,7 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         sdf.timeZone = TimeZone.getTimeZone("UTC")
 
-        val cutoffTime = if (days in 1..364) {
+        val cutoffTime = if ((days in 1..364)) {
             System.currentTimeMillis() - (days.toLong() * 24 * 60 * 60 * 1000L)
         } else {
             0L
