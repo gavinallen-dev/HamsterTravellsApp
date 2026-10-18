@@ -68,6 +68,7 @@ class StatsFragment : Fragment() {
                         0 -> 1
                         1 -> 7
                         2 -> 30
+                        3 -> 365
                         else -> 1
                     }
                     viewModel.fetchHistory(days)
@@ -180,10 +181,16 @@ class StatsFragment : Fragment() {
     }
 
     private fun updateLineChart(history: List<HamsterViewModel.HistoryPoint>) {
-        chartReferenceTime = history.first().timestamp
+        val validHistory = history.filter { (_, totalDistance) -> totalDistance != null && (totalDistance > 0.0) }
+        if (validHistory.isEmpty()) {
+            binding.lineChart.clear()
+            return
+        }
+
+        chartReferenceTime = validHistory.first().timestamp
         
-        val entries = history.mapNotNull { (timestamp, totalDistance) ->
-            totalDistance?.let { y -> Entry((timestamp - chartReferenceTime).toFloat(), y.toFloat()) }
+        val entries = validHistory.map { (timestamp, totalDistance) ->
+            Entry((timestamp - chartReferenceTime).toFloat(), totalDistance!!.toFloat())
         }
         
         val lineColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
@@ -206,7 +213,7 @@ class StatsFragment : Fragment() {
 
     private fun updateBarChart(history: List<HamsterViewModel.HistoryPoint>) {
         val dailyMaxes = history.asSequence()
-            .filter { (_, _, dailyDistance) -> dailyDistance != null }
+            .filter { (_, _, dailyDistance) -> dailyDistance != null && dailyDistance > 0.0 }
             .groupBy { (timestamp) -> 
                 val cal = Calendar.getInstance().apply { 
                     timeInMillis = timestamp

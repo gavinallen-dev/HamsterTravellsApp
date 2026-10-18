@@ -251,84 +251,40 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
         _leaderboard.value = list.sortedBy { (_, distance) -> distance }
     }
 
+    companion object {
+        private const val TRANSACTION_CHANNEL_ID = "1061276"
+        private const val DAILY_CHANNEL_ID = "3540677"
+        private const val DAILY_READ_API_KEY = "51BNZU5YHL8CMLXK"
+    }
+
     data class HistoryPoint(val timestamp: Long, val totalDistance: Double?, val dailyDistance: Double?)
     private val _history = MutableLiveData<List<HistoryPoint>>()
     val history: LiveData<List<HistoryPoint>> = _history
 
     fun fetchHistory(days: Int) {
         val queue = Volley.newRequestQueue(getApplication())
-        if (days == 30) {
-            val url = "https://api.thingspeak.com/channels/1061276/feeds.json?results=8000"
-            val request = JsonObjectRequest(
-                Request.Method.GET,
-                url,
-                null,
-                { response ->
-                    try {
-                        val feeds = response.getJSONArray("feeds")
-                        if (feeds.length() > 0) {
-                            val oldestFeed = feeds.getJSONObject(0)
-                            val oldestCreated = oldestFeed.getString("created_at")
-                            val url2 = "https://api.thingspeak.com/channels/1061276/feeds.json?results=8000&end=$oldestCreated"
-
-                            val request2 = JsonObjectRequest(
-                                Request.Method.GET,
-                                url2,
-                                null,
-                                { response2 ->
-                                    try {
-                                        val feeds2 = response2.getJSONArray("feeds")
-                                        val combinedFeeds = JSONArray()
-                                        for (i in 0 until feeds2.length()) {
-                                            combinedFeeds.put(feeds2.getJSONObject(i))
-                                        }
-                                        for (i in 0 until feeds.length()) {
-                                            combinedFeeds.put(feeds.getJSONObject(i))
-                                        }
-                                        processFeeds(combinedFeeds, days)
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                        processFeeds(feeds, days)
-                                    }
-                                },
-                                { error ->
-                                    Log.e("HamsterViewModel", "Error fetching history batch 2: $error")
-                                    processFeeds(feeds, days)
-                                }
-                            )
-                            queue.add(request2)
-                        } else {
-                            processFeeds(feeds, days)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                },
-                { error ->
-                    Log.e("HamsterViewModel", "Error fetching history: $error")
-                }
-            )
-            queue.add(request)
+        val url = if (days <= 7) {
+            "https://api.thingspeak.com/channels/$TRANSACTION_CHANNEL_ID/feeds.json?days=$days"
         } else {
-            val url = "https://api.thingspeak.com/channels/1061276/feeds.json?days=$days"
-            val request = JsonObjectRequest(
-                Request.Method.GET,
-                url,
-                null,
-                { response ->
-                    try {
-                        val feeds = response.getJSONArray("feeds")
-                        processFeeds(feeds, days)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                },
-                { error ->
-                    Log.e("HamsterViewModel", "Error fetching history: $error")
-                }
-            )
-            queue.add(request)
+            "https://api.thingspeak.com/channels/$DAILY_CHANNEL_ID/feeds.json?api_key=$DAILY_READ_API_KEY&days=$days"
         }
+        val request = JsonObjectRequest(
+            Request.Method.GET,
+            url,
+            null,
+            { response ->
+                try {
+                    val feeds = response.getJSONArray("feeds")
+                    processFeeds(feeds, days)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            },
+            { error ->
+                Log.e("HamsterViewModel", "Error fetching history: $error")
+            }
+        )
+        queue.add(request)
     }
 
     private fun processFeeds(feeds: JSONArray, days: Int) {
@@ -344,11 +300,16 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
 
         for (i in 0 until feeds.length()) {
             val feed = feeds.getJSONObject(i)
+            val field4 = feed.optString("field4")
             val field8 = feed.optString("field8")
+            val field2 = feed.optString("field2")
             val field5 = feed.optString("field5")
 
-            val totalDistance = if ((field8 != "null") && field8.isNotEmpty()) field8.toDouble() else null
-            val dailyDistance = if ((field5 != "null") && field5.isNotEmpty()) field5.toDouble() else null
+            val totalDistance = if ((field4 != "null") && field4.isNotEmpty()) field4.toDoubleOrNull()
+                else if ((field8 != "null") && field8.isNotEmpty()) field8.toDoubleOrNull() else null
+
+            val dailyDistance = if ((field2 != "null") && field2.isNotEmpty()) field2.toDoubleOrNull()
+                else if ((field5 != "null") && field5.isNotEmpty()) field5.toDoubleOrNull() else null
 
             if ((totalDistance != null) || (dailyDistance != null)) {
                 val timeStr = feed.getString("created_at")
@@ -363,7 +324,7 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
 
     fun fetchCurrentDistance() {
         val queue = Volley.newRequestQueue(getApplication())
-        val url = "https://api.thingspeak.com/channels/1061276/fields/8/last.json"
+        val url = "https://api.thingspeak.com/channels/$TRANSACTION_CHANNEL_ID/fields/8/last.json"
 
         val request = JsonObjectRequest(
             Request.Method.GET,

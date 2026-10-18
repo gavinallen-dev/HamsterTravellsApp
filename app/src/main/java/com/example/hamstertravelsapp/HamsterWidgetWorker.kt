@@ -36,7 +36,8 @@ class HamsterWidgetWorker(
     override suspend fun doWork(): Result {
         return withContext(Dispatchers.IO) {
             try {
-                val urlString = "https://api.thingspeak.com/channels/1061276/feeds.json?days=8"
+                // 1. Fetch daily metrics from new Daily Channel (3540677)
+                val urlString = "https://api.thingspeak.com/channels/3540677/feeds.json?api_key=51BNZU5YHL8CMLXK&days=8"
                 val url = URL(urlString)
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
@@ -86,36 +87,78 @@ class HamsterWidgetWorker(
                     val bucketTime = feedTime - (12 * 60 * 60 * 1000L)
                     val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(bucketTime))
 
-                    val field5Str = feed.optString("field5", "")
-                    val field5Val = if ((field5Str != "null") && field5Str.isNotEmpty()) field5Str.toDoubleOrNull() ?: 0.0 else 0.0
-
-                    val field8Str = feed.optString("field8", "")
-                    val field8Val = if ((field8Str != "null") && field8Str.isNotEmpty()) field8Str.toDoubleOrNull() ?: 0.0 else 0.0
+                    val dailyStr = if (feed.has("field2") && feed.optString("field2") != "null") feed.optString("field2") else feed.optString("field5", "")
+                    val dailyVal = if (dailyStr.isNotEmpty() && dailyStr != "null") dailyStr.toDoubleOrNull() ?: 0.0 else 0.0
 
                     if (feedTime >= twelveHoursAgo) {
-                        if (field5Val > lastNightPeak) {
-                            lastNightPeak = field5Val
+                        if (dailyVal > lastNightPeak) {
+                            lastNightPeak = dailyVal
                         }
                     }
 
-                    if (field5Val > (dailyPeaksMap[dateStr] ?: 0.0)) {
-                        dailyPeaksMap[dateStr] = field5Val
-                    }
-
-                    if (field8Val > 0.0) {
-                        totalDistance = field8Val
+                    if (dailyVal > (dailyPeaksMap[dateStr] ?: 0.0)) {
+                        dailyPeaksMap[dateStr] = dailyVal
                     }
                 }
 
                 if ((lastNightPeak == 0.0) && (feeds.length() > 0)) {
                     for (i in (feeds.length() - 1) downTo maxOf(0, feeds.length() - 50)) {
                         val feed = feeds.getJSONObject(i)
-                        val field5Str = feed.optString("field5", "")
-                        val field5Val = if ((field5Str != "null") && field5Str.isNotEmpty()) field5Str.toDoubleOrNull() ?: 0.0 else 0.0
-                        if (field5Val > 0.0) {
-                            lastNightPeak = field5Val
+                        val dailyStr = if (feed.has("field2") && feed.optString("field2") != "null") feed.optString("field2") else feed.optString("field5", "")
+                        val dailyVal = if (dailyStr.isNotEmpty() && dailyStr != "null") dailyStr.toDoubleOrNull() ?: 0.0 else 0.0
+                        if (dailyVal > 0.0) {
+                            lastNightPeak = dailyVal
                             break
                         }
+                    }
+                }
+
+                // 2. Fetch latest total cumulative distance from Daily Channel (3540677, Field 4) or Transaction Channel (1061276, Field 8)
+                try {
+                    val totalUrl = URL("https://api.thingspeak.com/channels/3540677/fields/4/last.json?api_key=51BNZU5YHL8CMLXK")
+                    val totalConn = totalUrl.openConnection() as HttpURLConnection
+                    totalConn.requestMethod = "GET"
+                    totalConn.connectTimeout = 10000
+                    totalConn.readTimeout = 10000
+                    if (totalConn.responseCode == HttpURLConnection.HTTP_OK) {
+                        val totalReader = BufferedReader(InputStreamReader(totalConn.inputStream))
+                        val totalSb = StringBuilder()
+                        var totalLine: String?
+                        while (totalReader.readLine().also { totalLine = it } != null) {
+                            totalSb.append(totalLine)
+                        }
+                        totalReader.close()
+                        val totalJson = JSONObject(totalSb.toString())
+                        val field4Str = totalJson.optString("field4", "")
+                        totalDistance = field4Str.toDoubleOrNull() ?: 0.0
+                    }
+                    totalConn.disconnect()
+                } catch (e: Exception) {
+                    Log.e("HamsterWidgetWorker", "Failed to fetch cumulative total distance from daily channel", e)
+                }
+
+                if (totalDistance == 0.0) {
+                    try {
+                        val totalUrl = URL("https://api.thingspeak.com/channels/1061276/fields/8/last.json")
+                        val totalConn = totalUrl.openConnection() as HttpURLConnection
+                        totalConn.requestMethod = "GET"
+                        totalConn.connectTimeout = 10000
+                        totalConn.readTimeout = 10000
+                        if (totalConn.responseCode == HttpURLConnection.HTTP_OK) {
+                            val totalReader = BufferedReader(InputStreamReader(totalConn.inputStream))
+                            val totalSb = StringBuilder()
+                            var totalLine: String?
+                            while (totalReader.readLine().also { totalLine = it } != null) {
+                                totalSb.append(totalLine)
+                            }
+                            totalReader.close()
+                            val totalJson = JSONObject(totalSb.toString())
+                            val field8Str = totalJson.optString("field8", "")
+                            totalDistance = field8Str.toDoubleOrNull() ?: 0.0
+                        }
+                        totalConn.disconnect()
+                    } catch (e: Exception) {
+                        Log.e("HamsterWidgetWorker", "Failed to fetch cumulative total distance from transaction channel", e)
                     }
                 }
 
