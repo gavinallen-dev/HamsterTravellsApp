@@ -305,13 +305,16 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
             val field2 = feed.optString("field2")
             val field5 = feed.optString("field5")
 
-            val totalDistance = if ((field4 != "null") && field4.isNotEmpty()) field4.toDoubleOrNull()
-                else if ((field8 != "null") && field8.isNotEmpty()) field8.toDoubleOrNull() else null
+            val rawTotal = if (field4 != "null" && field4.isNotEmpty() && field4 != "0" && field4 != "0.0") field4.toDoubleOrNull()
+                else if (field8 != "null" && field8.isNotEmpty() && field8 != "0" && field8 != "0.0") field8.toDoubleOrNull() else null
 
-            val dailyDistance = if ((field2 != "null") && field2.isNotEmpty()) field2.toDoubleOrNull()
-                else if ((field5 != "null") && field5.isNotEmpty()) field5.toDoubleOrNull() else null
+            val rawDaily = if (field2 != "null" && field2.isNotEmpty() && field2 != "0" && field2 != "0.0") field2.toDoubleOrNull()
+                else if (field5 != "null" && field5.isNotEmpty() && field5 != "0" && field5 != "0.0") field5.toDoubleOrNull() else null
 
-            if ((totalDistance != null) || (dailyDistance != null)) {
+            val totalDistance = if (rawTotal != null && (rawTotal > 0.0)) rawTotal else null
+            val dailyDistance = if (rawDaily != null && (rawDaily > 0.0)) rawDaily else null
+
+            if (totalDistance != null || dailyDistance != null) {
                 val timeStr = feed.getString("created_at")
                 val time = sdf.parse(timeStr)?.time ?: 0L
                 if (days == 365 || time >= cutoffTime) {

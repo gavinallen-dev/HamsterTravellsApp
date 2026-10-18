@@ -110,6 +110,7 @@ class StatsFragment : Fragment() {
             xAxis.gridColor = gridColor
             axisLeft.textColor = textColor
             axisLeft.gridColor = gridColor
+            axisLeft.resetAxisMinimum()
             axisRight.isEnabled = false
             legend.textColor = textColor
             
@@ -181,7 +182,20 @@ class StatsFragment : Fragment() {
     }
 
     private fun updateLineChart(history: List<HamsterViewModel.HistoryPoint>) {
-        val validHistory = history.filter { (_, totalDistance) -> totalDistance != null && (totalDistance > 0.0) }
+        val maxTotalSeen = history.asSequence().mapNotNull { (_, totalDistance) -> totalDistance }.maxOrNull() ?: 0.0
+        val threshold = maxTotalSeen * 0.5
+
+        var runningMax = threshold
+        val validHistory = history.mapNotNull { point ->
+            val total = point.totalDistance
+            if ((total != null) && (total >= runningMax) && (total > 0.0)) {
+                runningMax = total
+                point
+            } else {
+                null
+            }
+        }
+
         if (validHistory.isEmpty()) {
             binding.lineChart.clear()
             return
@@ -207,13 +221,14 @@ class StatsFragment : Fragment() {
         }
 
         binding.lineChart.data = LineData(dataSet)
+        binding.lineChart.axisLeft.resetAxisMinimum()
         binding.lineChart.xAxis.setLabelCount(5, false)
         binding.lineChart.invalidate()
     }
 
     private fun updateBarChart(history: List<HamsterViewModel.HistoryPoint>) {
         val dailyMaxes = history.asSequence()
-            .filter { (_, _, dailyDistance) -> dailyDistance != null && dailyDistance > 0.0 }
+            .filter { (_, _, dailyDistance) -> (dailyDistance != null) && (dailyDistance > 0.0) }
             .groupBy { (timestamp) -> 
                 val cal = Calendar.getInstance().apply { 
                     timeInMillis = timestamp
