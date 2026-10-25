@@ -263,11 +263,8 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
 
     fun fetchHistory(days: Int) {
         val queue = Volley.newRequestQueue(getApplication())
-        val url = if (days <= 7) {
-            "https://api.thingspeak.com/channels/$TRANSACTION_CHANNEL_ID/feeds.json?days=$days"
-        } else {
-            "https://api.thingspeak.com/channels/$DAILY_CHANNEL_ID/feeds.json?api_key=$DAILY_READ_API_KEY&days=$days"
-        }
+        val fetchDays = if (days <= 7) days + 1 else days
+        val url = "https://api.thingspeak.com/channels/$DAILY_CHANNEL_ID/feeds.json?api_key=$DAILY_READ_API_KEY&days=$fetchDays"
         val request = JsonObjectRequest(
             Request.Method.GET,
             url,
@@ -293,7 +290,7 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
         sdf.timeZone = TimeZone.getTimeZone("UTC")
 
         val cutoffTime = if ((days in 1..364)) {
-            System.currentTimeMillis() - (days.toLong() * 24 * 60 * 60 * 1000L)
+            System.currentTimeMillis() - ((days + 1).toLong() * 24 * 60 * 60 * 1000L)
         } else {
             0L
         }

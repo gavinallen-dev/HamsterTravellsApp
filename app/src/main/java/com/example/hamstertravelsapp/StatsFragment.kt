@@ -7,10 +7,12 @@ import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import com.example.hamstertravelsapp.databinding.FragmentStatsBinding
+import com.github.mikephil.charting.charts.BarLineChartBase
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.BarData
 import com.github.mikephil.charting.data.BarDataSet
@@ -31,6 +33,9 @@ class StatsFragment : Fragment() {
     private val binding get() = _binding!!
     
     private val viewModel: HamsterViewModel by activityViewModels()
+
+    private var chartReferenceTime: Long = 0L
+    private var barTimestamps: List<Long> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -90,13 +95,27 @@ class StatsFragment : Fragment() {
             binding.loadingProgress.visibility = View.GONE
             updateChart(history)
         }
+
+        binding.btnZoomIn.setOnClickListener {
+            getActiveChart().zoomIn()
+        }
+
+        binding.btnZoomOut.setOnClickListener {
+            getActiveChart().zoomOut()
+        }
+
+        binding.btnZoomReset.setOnClickListener {
+            getActiveChart().fitScreen()
+        }
         
         // Initial fetch
         viewModel.fetchHistory(1)
         binding.loadingProgress.visibility = View.VISIBLE
     }
 
-    private var chartReferenceTime: Long = 0L
+    private fun getActiveChart(): BarLineChartBase<*> {
+        return if (binding.lineChart.isVisible) binding.lineChart else binding.barChart
+    }
 
     private fun setupLineChart() {
         val textColor = ContextCompat.getColor(requireContext(), R.color.chart_text)
@@ -108,6 +127,7 @@ class StatsFragment : Fragment() {
             xAxis.position = XAxis.XAxisPosition.BOTTOM
             xAxis.textColor = textColor
             xAxis.gridColor = gridColor
+            xAxis.setAvoidFirstLastClipping(true)
             axisLeft.textColor = textColor
             axisLeft.gridColor = gridColor
             axisLeft.resetAxisMinimum()
@@ -115,15 +135,21 @@ class StatsFragment : Fragment() {
             legend.textColor = textColor
             
             xAxis.valueFormatter = object : ValueFormatter() {
+                private val sdf = SimpleDateFormat("", Locale.getDefault()).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
                 override fun getFormattedValue(value: Float): String {
                     val date = Date(value.toLong() + chartReferenceTime)
-                    val pattern = when (binding.tabLayout.selectedTabPosition) {
-                        0 -> "HH:mm"
-                        1 -> "EEE"
-                        2 -> "MMM d"
-                        else -> "MMM d"
+                    val visibleRangeMillis = binding.lineChart.highestVisibleX - binding.lineChart.lowestVisibleX
+                    val visibleRangeDays = visibleRangeMillis / (1000f * 60f * 60f * 24f)
+                    
+                    val pattern = when {
+                        visibleRangeDays > 60f -> "MMM yyyy"
+                        (visibleRangeDays in 2f..60f) -> "MMM d"
+                        else -> "EEE d, HH:mm"
                     }
-                    return SimpleDateFormat(pattern, Locale.getDefault()).format(date)
+                    sdf.applyPattern(pattern)
+                    return sdf.format(date)
                 }
             }
             xAxis.granularity = 1f
@@ -140,21 +166,33 @@ class StatsFragment : Fragment() {
             xAxis.position = XAxis.XAxisPosition.BOTTOM
             xAxis.textColor = textColor
             xAxis.gridColor = gridColor
+            xAxis.setAvoidFirstLastClipping(true)
             axisLeft.textColor = textColor
             axisLeft.gridColor = gridColor
+            axisLeft.axisMinimum = 0f
+            axisLeft.spaceBottom = 0f
             axisRight.isEnabled = false
             legend.textColor = textColor
 
             xAxis.valueFormatter = object : ValueFormatter() {
+                private val sdf = SimpleDateFormat("", Locale.getDefault()).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
                 override fun getFormattedValue(value: Float): String {
-                    val date = Date(value.toLong() + chartReferenceTime)
-                    val pattern = when (binding.tabLayout.selectedTabPosition) {
-                        0 -> "HH:mm"
-                        1 -> "EEE"
-                        2 -> "MMM d"
-                        else -> "MMM d"
+                    val index = value.toInt()
+                    if (index in barTimestamps.indices) {
+                        val date = Date(barTimestamps[index])
+                        val visibleRangeDays = binding.barChart.highestVisibleX - binding.barChart.lowestVisibleX
+                        
+                        val pattern = when {
+                            visibleRangeDays > 60f -> "MMM yyyy"
+                            (visibleRangeDays in 2f..60f) -> "MMM d"
+                            else -> "EEE d, HH:mm"
+                        }
+                        sdf.applyPattern(pattern)
+                        return sdf.format(date)
                     }
-                    return SimpleDateFormat(pattern, Locale.getDefault()).format(date)
+                    return ""
                 }
             }
             xAxis.granularity = 1f
@@ -222,7 +260,12 @@ class StatsFragment : Fragment() {
 
         binding.lineChart.data = LineData(dataSet)
         binding.lineChart.axisLeft.resetAxisMinimum()
-        binding.lineChart.xAxis.setLabelCount(5, false)
+        val labelCount = when (binding.tabLayout.selectedTabPosition) {
+            0 -> 3
+            1 -> 4
+            else -> 4
+        }
+        binding.lineChart.xAxis.setLabelCount(labelCount, false)
         binding.lineChart.invalidate()
     }
 
@@ -230,7 +273,7 @@ class StatsFragment : Fragment() {
         val dailyMaxes = history.asSequence()
             .filter { (_, _, dailyDistance) -> (dailyDistance != null) && (dailyDistance > 0.0) }
             .groupBy { (timestamp) -> 
-                val cal = Calendar.getInstance().apply { 
+                val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { 
                     timeInMillis = timestamp
                     this[Calendar.HOUR_OF_DAY] = 0
                     this[Calendar.MINUTE] = 0
@@ -247,10 +290,11 @@ class StatsFragment : Fragment() {
             return
         }
 
-        chartReferenceTime = dailyMaxes.firstKey()
+        barTimestamps = dailyMaxes.keys.toList()
 
-        val entries = dailyMaxes.map { (timestamp, maxDistance) ->
-            BarEntry((timestamp - chartReferenceTime).toFloat(), maxDistance.toFloat())
+        val entries = barTimestamps.indices.map { index ->
+            val maxDistance = dailyMaxes[barTimestamps[index]] ?: 0.0
+            BarEntry(index.toFloat(), maxDistance.toFloat())
         }
 
         val barColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
@@ -261,11 +305,12 @@ class StatsFragment : Fragment() {
         }
 
         val barData = BarData(dataSet)
-        // Set bar width to 80% of a day in milliseconds
-        barData.barWidth = 86400000f * 0.8f 
+        barData.barWidth = 0.6f
 
         binding.barChart.data = barData
-        binding.barChart.xAxis.granularity = 86400000f
+        binding.barChart.axisLeft.axisMinimum = 0f
+        binding.barChart.axisLeft.spaceBottom = 0f
+        binding.barChart.xAxis.granularity = 1f
         binding.barChart.xAxis.setLabelCount(minOf(dailyMaxes.size, 5), false)
         binding.barChart.invalidate()
     }

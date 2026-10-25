@@ -15,6 +15,65 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <LinearLayout
+        android:id="@+id/zoom_controls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="@id/stats_title"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/stats_title">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_zoom_out"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="32dp"
+            android:minHeight="0dp"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:padding="0dp"
+            android:text="@string/label_zoom_out"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_zoom_in"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="36dp"
+            android:layout_height="32dp"
+            android:minHeight="0dp"
+            android:layout_marginStart="4dp"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:padding="0dp"
+            android:text="@string/label_zoom_in"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_zoom_reset"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:minHeight="0dp"
+            android:layout_marginStart="4dp"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="0dp"
+            android:text="@string/label_zoom_reset"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout"
         android:layout_width="0dp"

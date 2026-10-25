@@ -18,4 +18,7 @@
     <string name="tab_week">Week</string>
     <string name="tab_month">Month</string>
     <string name="tab_year">Year</string>
+    <string name="label_zoom_in">+</string>
+    <string name="label_zoom_out">−</string>
+    <string name="label_zoom_reset">Reset</string>
 </resources>
