@@ -19,7 +19,6 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 class HamsterWidgetWorker(
     context: Context,
@@ -60,15 +59,7 @@ class HamsterWidgetWorker(
                 val jsonObject = JSONObject(responseStringBuilder.toString())
                 val feeds = jsonObject.getJSONArray("feeds")
 
-                val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-                sdf.timeZone = TimeZone.getTimeZone("UTC")
-
-                val currentTime = System.currentTimeMillis()
-                val twelveHoursAgo = currentTime - (12 * 60 * 60 * 1000L)
-
-                var lastNightPeak = 0.0
                 var totalDistance = 0.0
-
                 val dailyPeaksMap = mutableMapOf<String, Double>()
 
                 for (i in 0 until feeds.length()) {
@@ -76,40 +67,13 @@ class HamsterWidgetWorker(
                     val timeStr = feed.optString("created_at", "")
                     if (timeStr.length < 10) continue
 
-                    val feedTime = try {
-                        sdf.parse(timeStr)?.time ?: 0L
-                    } catch (_: Exception) {
-                        0L
-                    }
-
-                    // Offset the date calculation by 12 hours so that a full night run (e.g. 6pm to 6am)
-                    // stays within a single "hamster day" bucket.
-                    val bucketTime = feedTime - (12 * 60 * 60 * 1000L)
-                    val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(bucketTime))
+                    val dateStr = timeStr.substring(0, 10) // YYYY-MM-DD from created_at
 
                     val dailyStr = if (feed.has("field2") && feed.optString("field2") != "null") feed.optString("field2") else feed.optString("field5", "")
                     val dailyVal = if (dailyStr.isNotEmpty() && dailyStr != "null") dailyStr.toDoubleOrNull() ?: 0.0 else 0.0
 
-                    if (feedTime >= twelveHoursAgo) {
-                        if (dailyVal > lastNightPeak) {
-                            lastNightPeak = dailyVal
-                        }
-                    }
-
-                    if (dailyVal > (dailyPeaksMap[dateStr] ?: 0.0)) {
+                    if (dailyVal > 0.0) {
                         dailyPeaksMap[dateStr] = dailyVal
-                    }
-                }
-
-                if ((lastNightPeak == 0.0) && (feeds.length() > 0)) {
-                    for (i in (feeds.length() - 1) downTo maxOf(0, feeds.length() - 50)) {
-                        val feed = feeds.getJSONObject(i)
-                        val dailyStr = if (feed.has("field2") && feed.optString("field2") != "null") feed.optString("field2") else feed.optString("field5", "")
-                        val dailyVal = if (dailyStr.isNotEmpty() && dailyStr != "null") dailyStr.toDoubleOrNull() ?: 0.0 else 0.0
-                        if (dailyVal > 0.0) {
-                            lastNightPeak = dailyVal
-                            break
-                        }
                     }
                 }
 
@@ -168,14 +132,10 @@ class HamsterWidgetWorker(
                 // Sort peaks in chronological order to find history
                 val chronologicalPeaks = sortedDates.mapNotNull { dailyPeaksMap[it] }
 
-                // The latest peak in history represents the latest active session
-                val latestPeak = chronologicalPeaks.lastOrNull() ?: 0.0
+                // The latest peak in history represents the latest active session / night
+                val lastNightPeak = chronologicalPeaks.last()
 
-                if (lastNightPeak == 0.0) {
-                    lastNightPeak = latestPeak
-                }
-
-                // Exclude the last item (current/latest day) and compute the true 7-day average baseline from completed past nights
+                // Exclude the last item (current/latest day) and compute the 7-day average baseline from completed past nights
                 val pastPeaksList = chronologicalPeaks.dropLast(1).filter { it > 10.0 }.takeLast(7)
                 val baselineAverage = if (pastPeaksList.isNotEmpty()) {
                     pastPeaksList.average()

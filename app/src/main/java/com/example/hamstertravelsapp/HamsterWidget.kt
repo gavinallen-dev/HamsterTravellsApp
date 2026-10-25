@@ -42,9 +42,26 @@ class HamsterWidget : GlanceAppWidget() {
             val percentage = prefs[HamsterWidgetWorker.KEY_PERCENTAGE] ?: 100.0
             val lastUpdate = prefs[HamsterWidgetWorker.KEY_LAST_UPDATE] ?: "--:--"
 
-            val displayPercentage = if (percentage >= 100.0) percentage - 100.0 else 100.0 - percentage
-            val trendSymbol = if (percentage >= 100.0) "▲" else "▼"
-            val trendColorRes = if (percentage >= 100.0) R.color.widget_trend_up else R.color.widget_trend_down
+            val diffPercentage = percentage - 100.0
+            val absDiff = kotlin.math.abs(diffPercentage)
+
+            val trendSymbol = when {
+                diffPercentage > 0.05 -> "▲ "
+                diffPercentage < -0.05 -> "▼ "
+                else -> ""
+            }
+
+            val trendColorRes = when {
+                diffPercentage > 0.05 -> R.color.widget_trend_up
+                diffPercentage < -0.05 -> R.color.widget_trend_down
+                else -> R.color.widget_text_primary
+            }
+
+            val trendText = when {
+                absDiff <= 0.05 -> "0%"
+                absDiff < 10.0 -> String.format(Locale.US, "%s%.1f%%", trendSymbol, absDiff)
+                else -> String.format(Locale.US, "%s%.0f%%", trendSymbol, absDiff)
+            }
 
             Row(
                 modifier = GlanceModifier
@@ -122,7 +139,7 @@ class HamsterWidget : GlanceAppWidget() {
                         ),
                     )
                     Text(
-                        text = String.format(Locale.US, "%s %.0f%%", trendSymbol, displayPercentage),
+                        text = trendText,
                         style = TextStyle(
                             color = ColorProvider(trendColorRes),
                             fontSize = 14.sp,
