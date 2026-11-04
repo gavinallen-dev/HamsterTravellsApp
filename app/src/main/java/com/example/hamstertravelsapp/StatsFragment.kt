@@ -23,9 +23,9 @@ import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
 import com.google.android.material.tabs.TabLayout
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.floor
 
 class StatsFragment : Fragment() {
 
@@ -36,6 +36,44 @@ class StatsFragment : Fragment() {
 
     private var chartReferenceTime: Long = 0L
     private var barTimestamps: List<Long> = emptyList()
+
+    /** How the total line is sampled across the selected span. */
+    private enum class TotalMode {
+        /** Every recorded point, for the shorter spans. */
+        ALL_POINTS,
+
+        /** One point per reporting window, for spans where intraday detail isn't needed. */
+        LAST_PER_WINDOW,
+    }
+
+    /**
+     * How many reporting windows each tab covers. Daily and total differ on the Day tab: the bars
+     * compare the reporting window against the previous one, while the line shows only the
+     * reporting window itself.
+     */
+    private data class TabSpec(
+        val dailyWindows: Int,
+        val totalWindows: Int,
+        val totalMode: TotalMode,
+    )
+
+    private fun specFor(tabPosition: Int): TabSpec = when (tabPosition) {
+        TAB_DAY -> TabSpec(dailyWindows = 2, totalWindows = 1, totalMode = TotalMode.ALL_POINTS)
+        TAB_WEEK -> TabSpec(dailyWindows = 7, totalWindows = 7, totalMode = TotalMode.ALL_POINTS)
+        TAB_MONTH -> TabSpec(dailyWindows = 31, totalWindows = 31, totalMode = TotalMode.LAST_PER_WINDOW)
+        TAB_YEAR -> TabSpec(dailyWindows = 351, totalWindows = 351, totalMode = TotalMode.LAST_PER_WINDOW)
+        else -> TabSpec(dailyWindows = 2, totalWindows = 1, totalMode = TotalMode.ALL_POINTS)
+    }
+
+    private companion object {
+        const val TAB_DAY = 0
+        const val TAB_WEEK = 1
+        const val TAB_MONTH = 2
+        const val TAB_YEAR = 3
+
+        /** Above this many points the line reads clearly on its own and markers just clutter. */
+        const val MAX_POINTS_WITH_MARKERS = 48
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -69,14 +107,7 @@ class StatsFragment : Fragment() {
         binding.tabLayout.addOnTabSelectedListener(
             object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab?) {
-                    val days = when (tab?.position) {
-                        0 -> 1
-                        1 -> 7
-                        2 -> 30
-                        3 -> 365
-                        else -> 1
-                    }
-                    viewModel.fetchHistory(days)
+                    viewModel.fetchHistory(specFor(tab?.position ?: TAB_DAY).dailyWindows)
                     binding.loadingProgress.visibility = View.VISIBLE
                 }
 
@@ -109,7 +140,7 @@ class StatsFragment : Fragment() {
         }
         
         // Initial fetch
-        viewModel.fetchHistory(1)
+        viewModel.fetchHistory(specFor(binding.tabLayout.selectedTabPosition).dailyWindows)
         binding.loadingProgress.visibility = View.VISIBLE
     }
 
@@ -207,98 +238,139 @@ class StatsFragment : Fragment() {
         }
 
         val isTotal = binding.distanceTypeToggle.checkedButtonId == R.id.button_total
-        
+        val spec = specFor(binding.tabLayout.selectedTabPosition)
+
         if (isTotal) {
             binding.lineChart.visibility = View.VISIBLE
             binding.barChart.visibility = View.GONE
-            updateLineChart(history)
+            updateLineChart(history, spec)
         } else {
             binding.lineChart.visibility = View.GONE
             binding.barChart.visibility = View.VISIBLE
-            updateBarChart(history)
+            updateBarChart(history, spec)
         }
     }
 
-    private fun updateLineChart(history: List<HamsterViewModel.HistoryPoint>) {
-        val maxTotalSeen = history.asSequence().mapNotNull { (_, totalDistance) -> totalDistance }.maxOrNull() ?: 0.0
-        val threshold = maxTotalSeen * 0.5
+    /**
+     * Total distance as a line. Short spans plot every point recorded in range; longer spans plot
+     * the last total in each reporting window, since intraday detail isn't readable at that zoom.
+     */
+    private fun updateLineChart(history: List<HamsterViewModel.HistoryPoint>, spec: TabSpec) {
+        val windowEnd = viewModel.historyWindowEnd
+        val rangeStart = ReportingWindow.startOfWindow(windowEnd, spec.totalWindows - 1)
 
-        var runningMax = threshold
-        val validHistory = history.mapNotNull { point ->
-            val total = point.totalDistance
-            if ((total != null) && (total >= runningMax) && (total > 0.0)) {
-                runningMax = total
-                point
-            } else {
-                null
-            }
+        val inRange = history.filter { (timestamp, totalDistance) ->
+            (totalDistance != null) && (timestamp >= rangeStart)
         }
 
-        if (validHistory.isEmpty()) {
+        val points = when (spec.totalMode) {
+            TotalMode.ALL_POINTS -> inRange
+            TotalMode.LAST_PER_WINDOW -> inRange
+                .groupBy { (timestamp) -> ReportingWindow.windowIndexOf(timestamp, windowEnd) }
+                .values
+                .mapNotNull { bucket -> bucket.maxByOrNull { (timestamp) -> timestamp } }
+                .sortedBy { (timestamp) -> timestamp }
+        }
+
+        if (points.isEmpty()) {
             binding.lineChart.clear()
+            binding.lineChart.invalidate()
             return
         }
 
-        chartReferenceTime = validHistory.first().timestamp
-        
-        val entries = validHistory.map { (timestamp, totalDistance) ->
+        // Anchor to the start of the requested period rather than the first reading, so the axis
+        // spans the whole period and a sparse reading still sits at the right point within it.
+        chartReferenceTime = rangeStart
+
+        val entries = points.map { (timestamp, totalDistance) ->
             Entry((timestamp - chartReferenceTime).toFloat(), totalDistance!!.toFloat())
         }
-        
+
         val lineColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
         val fillColor = ContextCompat.getColor(requireContext(), R.color.chart_fill)
-        
+
         val dataSet = LineDataSet(entries, getString(R.string.chart_label_total)).apply {
             color = lineColor
             lineWidth = 1.5f
-            setDrawCircles(false)
+            // A series this short draws no visible line at all - a single reading draws nothing -
+            // so mark the points while there are few enough for markers not to clutter.
+            val markPoints = entries.size <= MAX_POINTS_WITH_MARKERS
+            setDrawCircles(markPoints)
+            if (markPoints) {
+                setCircleColor(lineColor)
+                circleRadius = 2.5f
+                setDrawCircleHole(false)
+            }
             valueTextSize = 0f
             setDrawFilled(true)
             this.fillColor = fillColor
             fillAlpha = 51
         }
 
+        // Fit the axis to the readings actually present rather than the whole requested period,
+        // so a span reaching further back than the channel's history doesn't trail off into empty
+        // chart - the same way the daily bars simply omit windows with no reading.
+        val windowMs = ReportingWindow.WINDOW_MS.toFloat()
+        var axisMin = entries.first().x
+        var axisMax = entries.last().x
+        if ((axisMax - axisMin) < windowMs) {
+            // Too narrow to plot - a single reading has no width at all - so fall back to showing
+            // the whole reporting window the readings sit in.
+            axisMin = floor(axisMin / windowMs) * windowMs
+            axisMax = axisMin + windowMs
+        }
+
         binding.lineChart.data = LineData(dataSet)
         binding.lineChart.axisLeft.resetAxisMinimum()
-        val labelCount = when (binding.tabLayout.selectedTabPosition) {
-            0 -> 3
-            1 -> 4
-            else -> 4
-        }
+        binding.lineChart.xAxis.axisMinimum = axisMin
+        binding.lineChart.xAxis.axisMaximum = axisMax
+        val labelCount = if (binding.tabLayout.selectedTabPosition == TAB_DAY) 3 else 4
         binding.lineChart.xAxis.setLabelCount(labelCount, false)
         binding.lineChart.invalidate()
     }
 
-    private fun updateBarChart(history: List<HamsterViewModel.HistoryPoint>) {
-        val dailyMaxes = history.asSequence()
-            .filter { (_, _, dailyDistance) -> (dailyDistance != null) && (dailyDistance > 0.0) }
-            .groupBy { (timestamp) -> 
-                val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { 
-                    timeInMillis = timestamp
-                    this[Calendar.HOUR_OF_DAY] = 0
-                    this[Calendar.MINUTE] = 0
-                    this[Calendar.SECOND] = 0
-                    this[Calendar.MILLISECOND] = 0
-                }
-                cal.timeInMillis
-            }
-            .mapValues { (_, points) -> points.maxOf { (_, _, dailyDistance) -> dailyDistance!! } }
-            .toSortedMap()
+    /**
+     * Max daily distance per reporting window as bars, oldest window first. Windows with no
+     * reading are omitted rather than drawn as zero, so spans reaching past the start of the
+     * daily channel's history simply show fewer bars.
+     */
+    private fun updateBarChart(history: List<HamsterViewModel.HistoryPoint>, spec: TabSpec) {
+        val windowEnd = viewModel.historyWindowEnd
 
-        if (dailyMaxes.isEmpty()) {
+        val maxPerWindow = history.asSequence()
+            .mapNotNull { (timestamp, _, dailyDistance) ->
+                if (dailyDistance == null) {
+                    null
+                } else {
+                    val windowIndex = ReportingWindow.windowIndexOf(timestamp, windowEnd)
+                    if (windowIndex in 0 until spec.dailyWindows) {
+                        windowIndex to dailyDistance
+                    } else {
+                        null
+                    }
+                }
+            }
+            .groupBy({ (windowIndex, _) -> windowIndex }, { (_, distance) -> distance })
+            .mapValues { (_, distances) -> distances.max() }
+
+        if (maxPerWindow.isEmpty()) {
             binding.barChart.clear()
+            binding.barChart.invalidate()
             return
         }
 
-        barTimestamps = dailyMaxes.keys.toList()
+        // The highest index is the oldest window, so descending order puts bars in time order.
+        val orderedWindows = maxPerWindow.keys.sortedDescending()
+        barTimestamps = orderedWindows.map { index ->
+            ReportingWindow.startOfWindow(windowEnd, index)
+        }
 
-        val entries = barTimestamps.indices.map { index ->
-            val maxDistance = dailyMaxes[barTimestamps[index]] ?: 0.0
-            BarEntry(index.toFloat(), maxDistance.toFloat())
+        val entries = orderedWindows.mapIndexed { position, windowIndex ->
+            BarEntry(position.toFloat(), maxPerWindow.getValue(windowIndex).toFloat())
         }
 
         val barColor = ContextCompat.getColor(requireContext(), R.color.chart_line)
-        
+
         val dataSet = BarDataSet(entries, getString(R.string.chart_label_daily)).apply {
             color = barColor
             valueTextSize = 0f
@@ -311,7 +383,7 @@ class StatsFragment : Fragment() {
         binding.barChart.axisLeft.axisMinimum = 0f
         binding.barChart.axisLeft.spaceBottom = 0f
         binding.barChart.xAxis.granularity = 1f
-        binding.barChart.xAxis.setLabelCount(minOf(dailyMaxes.size, 5), false)
+        binding.barChart.xAxis.setLabelCount(minOf(entries.size, 5), false)
         binding.barChart.invalidate()
     }
 

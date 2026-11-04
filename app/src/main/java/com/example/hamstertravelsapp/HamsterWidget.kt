@@ -40,7 +40,8 @@ class HamsterWidget : GlanceAppWidget() {
             val lastNightPeak = prefs[HamsterWidgetWorker.KEY_LAST_NIGHT_PEAK] ?: 0.0
             val totalDistance = prefs[HamsterWidgetWorker.KEY_TOTAL_DISTANCE] ?: 0.0
             val percentage = prefs[HamsterWidgetWorker.KEY_PERCENTAGE] ?: 100.0
-            val lastUpdate = prefs[HamsterWidgetWorker.KEY_LAST_UPDATE] ?: "--:--"
+            val dataDate = prefs[HamsterWidgetWorker.KEY_DATA_DATE] ?: "--"
+            val dataTime = prefs[HamsterWidgetWorker.KEY_DATA_TIME] ?: ""
 
             val diffPercentage = percentage - 100.0
             val absDiff = kotlin.math.abs(diffPercentage)
@@ -150,13 +151,26 @@ class HamsterWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.defaultWeight())
 
-                Text(
-                    text = lastUpdate,
-                    style = TextStyle(
-                        color = ColorProvider(R.color.widget_text_secondary),
-                        fontSize = 9.sp,
-                    ),
-                )
+                Column(
+                    modifier = GlanceModifier.fillMaxHeight(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    Text(
+                        text = dataDate,
+                        style = TextStyle(
+                            color = ColorProvider(R.color.widget_text_secondary),
+                            fontSize = 9.sp,
+                        ),
+                    )
+                    Text(
+                        text = dataTime,
+                        style = TextStyle(
+                            color = ColorProvider(R.color.widget_text_secondary),
+                            fontSize = 9.sp,
+                        ),
+                    )
+                }
             }
         }
     }

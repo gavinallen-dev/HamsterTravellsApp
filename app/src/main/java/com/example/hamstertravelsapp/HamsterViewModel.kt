@@ -6,10 +6,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.android.volley.Request
+import com.android.volley.RequestQueue
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
 import com.google.android.gms.maps.model.LatLng
 import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -252,79 +254,144 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
     }
 
     companion object {
-        private const val TRANSACTION_CHANNEL_ID = "1061276"
         private const val DAILY_CHANNEL_ID = "3540677"
         private const val DAILY_READ_API_KEY = "51BNZU5YHL8CMLXK"
+
+        /** ThingSpeak caps a single feeds.json response at 8000 entries. */
+        private const val MAX_RESULTS = 8000
+
+        /** Hourly writes make 100 days ~2400 entries, comfortably inside [MAX_RESULTS]. */
+        private const val CHUNK_WINDOWS = 100
+
+        /** Rows used to resolve the current total; the channel only ever counts upwards. */
+        private const val LATEST_TOTAL_RESULTS = 100
+
+        private const val TAG = "HamsterViewModel"
     }
 
-    data class HistoryPoint(val timestamp: Long, val totalDistance: Double?, val dailyDistance: Double?)
+    /**
+     * One reading from the daily channel: [dailyDistance] is the 12 hour rolling total (field2)
+     * and [totalDistance] the cumulative total (field4). Either may be absent on a given row.
+     */
+    data class HistoryPoint(
+        val timestamp: Long,
+        val totalDistance: Double?,
+        val dailyDistance: Double?,
+    )
+
     private val _history = MutableLiveData<List<HistoryPoint>>()
     val history: LiveData<List<HistoryPoint>> = _history
 
-    fun fetchHistory(days: Int) {
+    /** End of the reporting window the loaded [history] was aligned to. */
+    var historyWindowEnd: Long = ReportingWindow.reportingWindowEnd()
+        private set
+
+    /**
+     * Loads every daily channel reading covering [windowCount] reporting windows, ending with the
+     * reporting window itself. Long spans are fetched in chunks so they stay inside ThingSpeak's
+     * per-response cap.
+     */
+    fun fetchHistory(windowCount: Int) {
+        val windowEnd = ReportingWindow.reportingWindowEnd()
+        historyWindowEnd = windowEnd
+        val rangeStart = ReportingWindow.startOfWindow(windowEnd, windowCount - 1)
         val queue = Volley.newRequestQueue(getApplication())
-        val fetchDays = if (days <= 7) days + 1 else days
-        val url = "https://api.thingspeak.com/channels/$DAILY_CHANNEL_ID/feeds.json?api_key=$DAILY_READ_API_KEY&days=$fetchDays"
+        fetchChunk(queue, chunkRange(rangeStart, windowEnd), 0, mutableListOf())
+    }
+
+    /** Splits [start]..[end] into spans small enough to fetch in one request. */
+    private fun chunkRange(start: Long, end: Long): List<Pair<Long, Long>> {
+        val chunkMs = CHUNK_WINDOWS * ReportingWindow.WINDOW_MS
+        val chunks = mutableListOf<Pair<Long, Long>>()
+        var cursor = start
+        while (cursor < end) {
+            val chunkEnd = minOf(cursor + chunkMs, end)
+            chunks.add(cursor to chunkEnd)
+            cursor = chunkEnd
+        }
+        return chunks
+    }
+
+    /**
+     * Walks [chunks] in order, accumulating into [collected] and publishing once the last chunk
+     * settles. A failed chunk is logged and skipped rather than discarding the whole range.
+     */
+    private fun fetchChunk(
+        queue: RequestQueue,
+        chunks: List<Pair<Long, Long>>,
+        index: Int,
+        collected: MutableList<HistoryPoint>,
+    ) {
+        if (index >= chunks.size) {
+            _history.postValue(collected.sortedBy { (timestamp) -> timestamp })
+            return
+        }
+
+        val (start, end) = chunks[index]
+        val url = "https://api.thingspeak.com/channels/$DAILY_CHANNEL_ID/feeds.json" +
+            "?api_key=$DAILY_READ_API_KEY" +
+            "&results=$MAX_RESULTS" +
+            "&start=${ReportingWindow.toThingSpeakParam(start)}" +
+            "&end=${ReportingWindow.toThingSpeakParam(end)}"
+
         val request = JsonObjectRequest(
             Request.Method.GET,
             url,
             null,
             { response ->
                 try {
-                    val feeds = response.getJSONArray("feeds")
-                    processFeeds(feeds, days)
+                    collected.addAll(parseFeeds(response.optJSONArray("feeds"), start, end))
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(TAG, "Error parsing history chunk $index", e)
                 }
+                fetchChunk(queue, chunks, index + 1, collected)
             },
             { error ->
-                Log.e("HamsterViewModel", "Error fetching history: $error")
-            }
+                Log.e(TAG, "Error fetching history chunk $index: $error")
+                fetchChunk(queue, chunks, index + 1, collected)
+            },
         )
         queue.add(request)
     }
 
-    private fun processFeeds(feeds: JSONArray, days: Int) {
-        val list = mutableListOf<HistoryPoint>()
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-        sdf.timeZone = TimeZone.getTimeZone("UTC")
+    private fun parseFeeds(feeds: JSONArray?, start: Long, end: Long): List<HistoryPoint> {
+        if (feeds == null) return emptyList()
 
-        val cutoffTime = if ((days in 1..364)) {
-            System.currentTimeMillis() - ((days + 1).toLong() * 24 * 60 * 60 * 1000L)
-        } else {
-            0L
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
         }
 
+        val points = mutableListOf<HistoryPoint>()
         for (i in 0 until feeds.length()) {
-            val feed = feeds.getJSONObject(i)
-            val field4 = feed.optString("field4")
-            val field8 = feed.optString("field8")
-            val field2 = feed.optString("field2")
-            val field5 = feed.optString("field5")
+            val feed = feeds.optJSONObject(i) ?: continue
+            val timestamp = sdf.parse(feed.optString("created_at"))?.time ?: continue
+            if (timestamp !in start until end) continue
 
-            val rawTotal = if (field4 != "null" && field4.isNotEmpty() && field4 != "0" && field4 != "0.0") field4.toDoubleOrNull()
-                else if (field8 != "null" && field8.isNotEmpty() && field8 != "0" && field8 != "0.0") field8.toDoubleOrNull() else null
-
-            val rawDaily = if (field2 != "null" && field2.isNotEmpty() && field2 != "0" && field2 != "0.0") field2.toDoubleOrNull()
-                else if (field5 != "null" && field5.isNotEmpty() && field5 != "0" && field5 != "0.0") field5.toDoubleOrNull() else null
-
-            val totalDistance = if (rawTotal != null && (rawTotal > 0.0)) rawTotal else null
-            val dailyDistance = if (rawDaily != null && (rawDaily > 0.0)) rawDaily else null
-
-            if (totalDistance != null || dailyDistance != null) {
-                val timeStr = feed.getString("created_at")
-                val time = sdf.parse(timeStr)?.time ?: 0L
-                if (days == 365 || time >= cutoffTime) {
-                    list.add(HistoryPoint(time, totalDistance, dailyDistance))
-                }
+            val dailyDistance = feed.positiveDouble("field2")
+            val totalDistance = feed.positiveDouble("field4")
+            if (dailyDistance != null || totalDistance != null) {
+                points.add(HistoryPoint(timestamp, totalDistance, dailyDistance))
             }
         }
-        _history.postValue(list)
+        return points
     }
 
+    /** Reads a ThingSpeak field, treating missing, null and non-positive values as absent. */
+    private fun JSONObject.positiveDouble(field: String): Double? {
+        val raw = optString(field)
+        if (raw.isEmpty() || raw == "null") return null
+        return raw.toDoubleOrNull()?.takeIf { value -> value > 0.0 }
+    }
+
+    /**
+     * Resolves the max total distance (daily channel field4) used by the map and leaderboard.
+     * Scans the most recent rows rather than `last.json` so a trailing row with no field4 value
+     * doesn't leave us without a total.
+     */
     fun fetchCurrentDistance() {
         val queue = Volley.newRequestQueue(getApplication())
-        val url = "https://api.thingspeak.com/channels/$TRANSACTION_CHANNEL_ID/fields/8/last.json"
+        val url = "https://api.thingspeak.com/channels/$DAILY_CHANNEL_ID/feeds.json" +
+            "?api_key=$DAILY_READ_API_KEY&results=$LATEST_TOTAL_RESULTS"
 
         val request = JsonObjectRequest(
             Request.Method.GET,
@@ -332,15 +399,23 @@ class HamsterViewModel(application: Application) : AndroidViewModel(application)
             null,
             { response ->
                 try {
-                    val distance = response.getString("field8").toDouble()
-                    _currentDistance.value = distance
-                    updateLeaderboard()
+                    val feeds = response.optJSONArray("feeds")
+                    val maxTotal = (0 until (feeds?.length() ?: 0))
+                        .mapNotNull { i -> feeds?.optJSONObject(i)?.positiveDouble("field4") }
+                        .maxOrNull()
+
+                    if (maxTotal != null) {
+                        _currentDistance.value = maxTotal
+                        updateLeaderboard()
+                    } else {
+                        Log.w(TAG, "No field4 total found in the latest daily channel rows")
+                    }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(TAG, "Error parsing total distance", e)
                 }
             },
         ) { error ->
-            Log.e("HamsterViewModel", "Error fetching distance: $error")
+            Log.e(TAG, "Error fetching distance: $error")
         }
 
         queue.add(request)
