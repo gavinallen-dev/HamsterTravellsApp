@@ -20,6 +20,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.roundToInt
 
 /**
  * Refreshes the widget from the daily channel: field2 carries the 12 hour rolling distance and
@@ -43,11 +44,25 @@ class HamsterWidgetWorker(
         val KEY_DATA_DATE = stringPreferencesKey("data_date")
         val KEY_DATA_TIME = stringPreferencesKey("data_time")
 
+        /**
+         * Metres run in each hour of the reporting window, oldest hour first, comma separated.
+         * Feeds the widget's activity strip. All zeroes when the window was covered but nothing
+         * was run, and empty only when there were no readings to compare - the widget draws the
+         * first as a flat baseline and omits the strip entirely for the second, so a quiet night
+         * is distinguishable from a silent sensor.
+         */
+        val KEY_HOURLY_ACTIVITY = stringPreferencesKey("hourly_activity")
+
         private const val DAILY_CHANNEL_ID = "3540677"
         private const val DAILY_READ_API_KEY = "51BNZU5YHL8CMLXK"
 
         /** Windows before the reporting window that form the trend baseline. */
         private const val BASELINE_WINDOWS = 7
+
+        /** Hourly buckets in the activity strip - one reporting window's worth. */
+        private const val ACTIVITY_HOURS = 24
+
+        private const val HOUR_MS = 60L * 60 * 1000
 
         private const val TAG = "HamsterWidgetWorker"
     }
@@ -75,6 +90,7 @@ class HamsterWidgetWorker(
             }
 
             val peakByWindow = mutableMapOf<Int, Double>()
+            val totalsByTime = mutableListOf<Pair<Long, Double>>()
             var maxTotal = 0.0
             var latestReading = 0L
 
@@ -92,6 +108,7 @@ class HamsterWidgetWorker(
 
                 if (total != null) {
                     maxTotal = maxOf(maxTotal, total)
+                    totalsByTime += timestamp to total
                 }
 
                 if (daily == null) continue
@@ -120,6 +137,8 @@ class HamsterWidgetWorker(
                 100.0
             }
 
+            val hourlyActivity = hourlyActivity(totalsByTime, windowEnd)
+
             // Reported in UTC to match the midday window boundaries and the in-app chart axes.
             val hasReading = latestReading > 0L
             val dataDate = if (hasReading) utcFormat("MMM d", latestReading) else "--"
@@ -138,6 +157,7 @@ class HamsterWidgetWorker(
                         this[KEY_PERCENTAGE] = percentageValue
                         this[KEY_DATA_DATE] = dataDate
                         this[KEY_DATA_TIME] = dataTime
+                        this[KEY_HOURLY_ACTIVITY] = hourlyActivity
                     }
                 }
                 HamsterWidget().update(applicationContext, glanceId)
@@ -154,6 +174,48 @@ class HamsterWidgetWorker(
             Log.e(TAG, "Worker failed", e)
             Result.failure()
         }
+    }
+
+    /**
+     * Metres run in each hour of the reporting window ending at [windowEnd], oldest hour first,
+     * comma separated for storage.
+     *
+     * Derived from the differences between consecutive cumulative totals rather than from the
+     * rolling daily field, which is a 12 hour window and so says nothing about a single hour.
+     * Each difference is credited to the hour of the later reading, so the first hour picks up the
+     * run since the last reading before the window - the request reaches back far enough that one
+     * is normally present. Differences that are not increases are dropped: they only occur when
+     * the counter resets, and nothing was run.
+     *
+     * Returns all zeroes when the window held readings but none of them showed a run, and an
+     * empty string only when it held no comparable readings at all. The widget distinguishes the
+     * two: a quiet night still draws its baseline, where a silent sensor draws nothing.
+     */
+    private fun hourlyActivity(
+        totalsByTime: List<Pair<Long, Double>>,
+        windowEnd: Long,
+    ): String {
+        val windowStart = windowEnd - ReportingWindow.WINDOW_MS
+        val perHour = DoubleArray(ACTIVITY_HOURS)
+        var hasReadings = false
+
+        val sorted = totalsByTime.sortedBy { (timestamp, _) -> timestamp }
+        for (i in 1 until sorted.size) {
+            val (_, previousTotal) = sorted[i - 1]
+            val (timestamp, total) = sorted[i]
+            if ((timestamp <= windowStart) || (timestamp > windowEnd)) continue
+            hasReadings = true
+
+            val run = total - previousTotal
+            if (run <= 0.0) continue
+
+            val hour = ((timestamp - windowStart) / HOUR_MS).toInt()
+                .coerceIn(0, ACTIVITY_HOURS - 1)
+            perHour[hour] += run
+        }
+
+        if (!hasReadings) return ""
+        return perHour.joinToString(",") { metres -> metres.roundToInt().toString() }
     }
 
     /** Formats [millis] in UTC, so displayed times line up with the midday window boundaries. */

@@ -20,4 +20,6 @@
     <color name="widget_text_label">#B0BEC5</color>
     <color name="widget_trend_up">#4CAF50</color>
     <color name="widget_trend_down">#FFFF9800</color>
+    <color name="widget_spark_bar">#66BB6A</color> <!-- Activity strip bars -->
+    <color name="widget_spark_track">#33B0BEC5</color> <!-- Activity strip baseline, hours with no run -->
 </resources>
