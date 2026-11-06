@@ -231,13 +231,14 @@ class HamsterWidgetWorker(
             connectTimeout = 15000
             readTimeout = 15000
         }
-        try {
+        return try {
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 Log.e(TAG, "Request failed with HTTP ${connection.responseCode}")
-                return null
-            }
-            return BufferedReader(InputStreamReader(connection.inputStream)).use { reader ->
-                reader.readText()
+                null
+            } else {
+                BufferedReader(InputStreamReader(connection.inputStream)).use { reader ->
+                    reader.readText()
+                }
             }
         } finally {
             connection.disconnect()
@@ -247,7 +248,7 @@ class HamsterWidgetWorker(
     /** Reads a ThingSpeak field, treating missing, null and non-positive values as absent. */
     private fun JSONObject.positiveDouble(field: String): Double? {
         val raw = optString(field)
-        if (raw.isEmpty() || raw == "null") return null
+        if (raw.isEmpty() || (raw == "null")) return null
         return raw.toDoubleOrNull()?.takeIf { value -> value > 0.0 }
     }
 }
