@@ -46,6 +46,40 @@ class HamsterWidget : GlanceAppWidget() {
          * single row.
          */
         const val BARS_PER_GROUP = 6
+
+        /** Below this share of the baseline the hamster is flagged as struggling. */
+        const val LOW_ACTIVITY_PERCENTAGE = 50.0
+    }
+
+    /**
+     * What the hamster icon is reporting. Each status has its own copy of the launcher icon,
+     * identical but for the background colour standing in for the usual cyan, so the hamster and
+     * its border look the same whatever the status.
+     */
+    private enum class Status(val iconRes: Int, val description: String) {
+        /** Nothing came back for the window - the sensor itself may be the problem. */
+        NO_DATA(R.drawable.ic_hamster_status_no_data, "Hamster: no data"),
+
+        /** The window was covered, but the wheel never turned. */
+        IDLE(R.drawable.ic_hamster_status_idle, "Hamster: no activity overnight"),
+
+        /** Running, but well down on the baseline. */
+        LOW(R.drawable.ic_hamster_status_low, "Hamster: activity well down"),
+
+        NORMAL(R.mipmap.ic_hamster, "Hamster"),
+    }
+
+    /**
+     * Worst applicable status wins, so the icon always names the most serious thing wrong. The
+     * order matters: no readings has to be ruled out before a quiet night can be called, and an
+     * idle night is also a drop of more than half, so it would otherwise be reported as merely
+     * low.
+     */
+    private fun statusOf(hourlyActivity: List<Int>, percentage: Double): Status = when {
+        hourlyActivity.isEmpty() -> Status.NO_DATA
+        hourlyActivity.all { metres -> metres == 0 } -> Status.IDLE
+        percentage < LOW_ACTIVITY_PERCENTAGE -> Status.LOW
+        else -> Status.NORMAL
     }
 
     override val stateDefinition = PreferencesGlanceStateDefinition
@@ -61,6 +95,7 @@ class HamsterWidget : GlanceAppWidget() {
             val hourlyActivity = parseHourlyActivity(
                 prefs[HamsterWidgetWorker.KEY_HOURLY_ACTIVITY],
             )
+            val status = statusOf(hourlyActivity, percentage)
 
             val diffPercentage = percentage - 100.0
             val absDiff = kotlin.math.abs(diffPercentage)
@@ -97,8 +132,8 @@ class HamsterWidget : GlanceAppWidget() {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Image(
-                        provider = ImageProvider(R.mipmap.ic_hamster),
-                        contentDescription = "Hamster Icon",
+                        provider = ImageProvider(status.iconRes),
+                        contentDescription = status.description,
                     )
 
                     Spacer(modifier = GlanceModifier.width(12.dp))

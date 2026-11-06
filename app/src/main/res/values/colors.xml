@@ -22,4 +22,11 @@
     <color name="widget_trend_down">#FFFF9800</color>
     <color name="widget_spark_bar">#66BB6A</color> <!-- Activity strip bars -->
     <color name="widget_spark_track">#33B0BEC5</color> <!-- Activity strip baseline, hours with no run -->
+    <!--
+      Status backgrounds for the hamster icon, standing in for ic_hamster_background's cyan.
+      Pitched at the same softness as that cyan so the icon still reads as itself.
+    -->
+    <color name="widget_status_no_data">#AFB9BF</color> <!-- Nothing reported -->
+    <color name="widget_status_low">#F2A64B</color> <!-- Well down on the baseline -->
+    <color name="widget_status_idle">#E0736A</color> <!-- Reported, but no running -->
 </resources>
